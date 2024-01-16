@@ -41,12 +41,6 @@ void ABulletProjectile::OnHit(UPrimitiveComponent * HitComponent, AActor * Other
   Destroy();
 }
 
-void ABulletProjectile::Tick(float DeltaTime)
-{
-  Super::Tick(DeltaTime);
-
-}
-
 void ABulletProjectile::SetDirection(const FVector & Direction)
 {
   ProjectileMovementComponent->Velocity = ProjectileMovementComponent->InitialSpeed * Direction;

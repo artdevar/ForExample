@@ -5,6 +5,8 @@
 #include "HeroBase.generated.h"
 
 class AWeapon;
+class AHint;
+class APickupableActor;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWeaponPickedUpSignature, AWeapon*, Weapon);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWeaponDroppedSignature, AWeapon*, Weapon);
@@ -17,15 +19,13 @@ class FOREXAMPLE_API AHeroBase : public ACharacter
 public:
 
   AHeroBase();
-
-  void Tick(float DeltaSeconds) override;
   
   void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 public: 
 
-  UFUNCTION(BlueprintCallable, Category=Weapon)
-  void PickupWeapon(AWeapon * NewWeapon);
+  UFUNCTION(BlueprintCallable)
+  void UseButtonPressed();
 
   UFUNCTION(BlueprintCallable, Category=Weapon)
   void DropWeapon();
@@ -49,15 +49,31 @@ protected:
   UFUNCTION(BlueprintImplementableEvent, Category=Weapon)
   void OnWeaponShoot(FVector2D Recoil);
 
+  UFUNCTION(BlueprintPure)
+  APickupableActor * GetClosestPickupable(float MaxDistanceSquared) const;
+
+  UFUNCTION(BlueprintCallable)
+  void TryCreateHint();
+
+  void TryDestroyHint();
+
 protected:
 
   UPROPERTY(BlueprintReadOnly, Category=Weapon)
   AWeapon * Weapon = nullptr;
 
   UPROPERTY(BlueprintReadWrite, EditAnywhere, Category=Stats)
-  int32 Health = 0;
+  int32 MaxHealth = 0;
 
   UPROPERTY(BlueprintReadWrite, EditAnywhere, Category=Stats)
-  int32 Armor = 0;
+  int32 Health = 0;
+
+  UPROPERTY(EditDefaultsOnly)
+  float PickupableDiscoverDistanceSquared = 0.0f;
+
+  UPROPERTY(EditDefaultsOnly, Category = Projectile)
+  TSubclassOf<class AHint> HintClass;
+
+  TPair<APickupableActor*, AHint*> HintToPickupable;
 
 };

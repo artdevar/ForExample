@@ -15,7 +15,7 @@ AWeapon::AWeapon()
 
 void AWeapon::BeginPlay()
 {
-  AActor::BeginPlay();
+  Super::BeginPlay();
 
   const FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, true);
 
@@ -112,6 +112,7 @@ void AWeapon::OnNoAmmoLeft()
 
 void AWeapon::Reload()
 {
+  StopShooting();
   m_IsReloading = true;
 }
 

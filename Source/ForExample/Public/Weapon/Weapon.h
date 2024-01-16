@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Components/PickupableActor.h"
 #include "GameFramework/Actor.h"
 #include "Weapon.generated.h"
 
@@ -19,7 +20,7 @@ enum class EWeaponSound : uint8
 };
 
 UCLASS(Abstract)
-class FOREXAMPLE_API AWeapon : public AActor
+class FOREXAMPLE_API AWeapon : public APickupableActor
 {
   GENERATED_BODY()
 

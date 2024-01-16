@@ -16,8 +16,6 @@ public:
   
   ABulletProjectile();
 
-  void Tick(float DeltaTime) override;
-
   void SetDirection(const FVector & Direction);
 
   void SetDamage(int Damage);
