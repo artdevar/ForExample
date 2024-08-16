@@ -6,3 +6,4 @@
 
 1. [Start. Implemented some animations, weapon, recoil, etc.](https://youtu.be/bdR10srSX4Q?si=ct64iz-LjiRu7IUA)
 2. [Hint component added. A few new animations with weapons.](https://youtu.be/O--caZiBUno)
+3. [Improved recoil and crosshair. Fire modes and bullet impact have been added.](https://youtu.be/ofnIIUHvnrU?si=HtXYCq6wWBmdvWI2)
