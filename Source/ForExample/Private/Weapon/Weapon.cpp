@@ -5,6 +5,8 @@
 #include "Character/HeroBase.h"
 #include "Components/MeshComponent.h"
 #include "Engine/StaticMeshActor.h"
+#include "Game/MyGameInstance.h"
+#include "Kismet/GameplayStatics.h"
 
 const int32 AWeapon::INVALID_AMMO_AMOUNT = -1;
 
@@ -17,6 +19,8 @@ void AWeapon::BeginPlay()
 {
   Super::BeginPlay();
 
+  GameInstance = GetWorld()->GetGameInstance<UMyGameInstance>();
+
   const FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, true);
 
   m_MagazineActor = GetWorld()->SpawnActor<AStaticMeshActor>(MagazineClass);
@@ -28,29 +32,32 @@ void AWeapon::BeginPlay()
 
 void AWeapon::StartShooting()
 {
-  m_IsShooting = true;
-  m_NoAmmoEventTriggered = false;
+  if (IsReloading())
+    return;
 
-  Shoot();
+  if (!IsAmmo())
+  {
+    OnNoAmmoLeft();
+    return;
+  }
+
+  m_IsShooting = true;
+  ApplyFireModeAmmoLimit();
+
   GetWorldTimerManager().SetTimer(m_ShootingTimer, this, &AWeapon::Shoot, FireRate, true);
+  Shoot();
 }
 
 void AWeapon::StopShooting()
 {
-  m_IsShooting = false;
-  m_NoAmmoEventTriggered = false;
-
   GetWorldTimerManager().ClearTimer(m_ShootingTimer);
+
+  m_IsShooting = false;
+  ResetFireModeAmmoLimit();
 }
 
 void AWeapon::Shoot()
 {
-  if (IsReloading())
-  {
-    StopShooting();
-    return;
-  }
-
   if (!IsAmmo())
   {
     OnNoAmmoLeft();
@@ -58,8 +65,10 @@ void AWeapon::Shoot()
     return;
   }
 
+  if (m_AmountAmmoToShoot.has_value() && --m_AmountAmmoToShoot.value() == 0)
+    StopShooting();
+
   --CurrentMagazineAmount;
-  PlaySound(EWeaponSound::Shoot);
   ShootProjectile();
   OnWeaponShoot.Broadcast(GetRecoil());
   OnWeaponAmmoChanged.Broadcast(CurrentMagazineAmount);
@@ -99,15 +108,13 @@ void AWeapon::ShootProjectile()
     Projectile->SetDirection(Direction);
     Projectile->SetDamage(GetDamage());
   }
+
+  SpawnShootProjectile();
 }
 
 void AWeapon::OnNoAmmoLeft()
 {
-  if (m_NoAmmoEventTriggered)
-    return;
-
   PlaySound(EWeaponSound::NoAmmo);
-  m_NoAmmoEventTriggered = true;
 }
 
 void AWeapon::Reload()
@@ -119,6 +126,25 @@ void AWeapon::Reload()
 bool AWeapon::IsReloading() const
 {
   return m_IsReloading;
+}
+
+void AWeapon::PlaySound(EWeaponSound SoundType)
+{
+  UGameplayStatics::PlaySoundAtLocation(GetWorld(), GameInstance->GetRandomWeaponSound(GetClass(), SoundType), GetActorLocation());
+}
+
+void AWeapon::SwitchFireMode()
+{
+  const auto PrevMode = FireMode;
+
+  const int Index = FireModes.Find(FireMode);
+  FireMode = FireModes[(Index + 1) % FireModes.Num()];
+
+  if (FireMode != PrevMode)
+  {
+    PlaySound(EWeaponSound::FireModeSwitch);
+    OnFireModeChanged.Broadcast(FireMode);
+  }
 }
 
 void AWeapon::OnMagazineExtracted()
@@ -140,7 +166,7 @@ void AWeapon::OnMagazineExtracted()
 void AWeapon::OnMagazineTaken()
 {
   auto HeroMesh = GetOwner<ACharacter>()->GetMesh();
-  
+
   const FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, true);
 
   m_MagazineActor = GetWorld()->SpawnActor<AStaticMeshActor>(MagazineClass);
@@ -162,10 +188,9 @@ bool AWeapon::IsAmmo() const
   return CurrentMagazineAmount > 0;
 }
 
-FVector2D AWeapon::GetRecoil() const
+FWeaponRecoilParams AWeapon::GetRecoil() const
 {
-  const int Index = MagazineAmount - CurrentMagazineAmount - 1;
-  return Recoil[Index % Recoil.Num()];
+  return RecoilParams;
 }
 
 int AWeapon::GetDamage() const
@@ -176,4 +201,17 @@ int AWeapon::GetDamage() const
 bool AWeapon::CanBeShoot() const
 {
   return IsAmmo() && !IsReloading();
+}
+
+void AWeapon::ApplyFireModeAmmoLimit()
+{
+  constexpr uint32 AmmoToShoot[] = {1, 3};
+
+  if (FireMode != EWeaponFireMode::Automatic)
+    m_AmountAmmoToShoot = AmmoToShoot[int(FireMode)];
+}
+
+void AWeapon::ResetFireModeAmmoLimit()
+{
+  m_AmountAmmoToShoot.reset();
 }

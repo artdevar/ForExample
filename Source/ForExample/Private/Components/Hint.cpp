@@ -1,11 +1,9 @@
 #include "Components/Hint.h"
 #include "Character/HeroBase.h"
-#include "Components/PickupableActor.h"
+#include "Components/InteractableActor.h"
 #include "Camera/CameraComponent.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Utils/Input.h"
-
-#include "DrawDebugHelpers.h"
 
 AHint::AHint()
 {
@@ -25,7 +23,7 @@ void AHint::Tick(float DeltaSeconds)
   if (IsNeedFacingToOwner())
     FaceToHero();
 
-  if (IsNeedAttachToPickupable())
+  if (IsNeedAttachToInteractable())
     UpdatePosition();
 }
 
@@ -36,7 +34,7 @@ void AHint::UpdateText()
   APlayerController * PlayerController = GetOwner<ACharacter>()->GetController<APlayerController>();
   const FText Bind = UInput::GetKeyBindedToAction(PlayerController, ActionText->Action);
 
-  SetText(FText::Format(ActionText->Text, Bind));
+  SetText(FText::Format(ActionText->Text, Interactable->GetActorName(), Bind));
 }
 
 void AHint::FaceToHero()
@@ -50,7 +48,7 @@ void AHint::FaceToHero()
 
 void AHint::UpdatePosition()
 {
-  const FVector PickupablePos = Pickupable->GetActorLocation();
+  const FVector PickupablePos = Interactable->GetActorLocation();
   SetActorLocation(PickupablePos);
 }
 
@@ -70,7 +68,7 @@ bool AHint::IsNeedFacingToOwner() const
   return NeedFacing && GetOwner();
 }
 
-bool AHint::IsNeedAttachToPickupable() const
+bool AHint::IsNeedAttachToInteractable() const
 {
-  return IsAttachedToPickupable && Pickupable;
+  return IsAttachedToInteractable && Interactable;
 }

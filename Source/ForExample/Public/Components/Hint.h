@@ -7,7 +7,7 @@
 #include "Hint.generated.h"
 
 class AHeroBase;
-class APickupableActor;
+class AInteractableActor;
 class UInputAction;
 
 UENUM(BlueprintType)
@@ -34,13 +34,13 @@ class FOREXAMPLE_API AHint : public AActor
 {
   GENERATED_BODY()
 
-public: 
+public:
 
   AHint();
 
   void Tick(float DeltaSeconds) override;
 
-protected: 
+protected:
 
   UFUNCTION(BlueprintImplementableEvent)
   void SetText(const FText & Text);
@@ -58,20 +58,20 @@ protected:
 
   bool IsNeedFacingToOwner() const;
 
-  bool IsNeedAttachToPickupable() const;
+  bool IsNeedAttachToInteractable() const;
 
-protected: 
+protected:
 
   UPROPERTY(EditDefaultsOnly)
   TMap<EHintAction, FActionText> ActionTextWithBind;
 
 public:
-  
-  EHintAction HintAction = EHintAction::None;
-  AActor * Pickupable = nullptr;
 
-  bool NeedFacing             = false;
-  bool IsAttachedToPickupable = false;
+  EHintAction HintAction = EHintAction::None;
+  AInteractableActor * Interactable = nullptr;
+
+  bool NeedFacing               = false;
+  bool IsAttachedToInteractable = false;
 
   float DistanceDiscoverableSquared = 0.0f;
 };

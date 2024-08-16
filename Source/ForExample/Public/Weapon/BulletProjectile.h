@@ -13,7 +13,7 @@ class FOREXAMPLE_API ABulletProjectile : public AActor
   GENERATED_BODY()
 
 public:
-  
+
   ABulletProjectile();
 
   void SetDirection(const FVector & Direction);
@@ -25,7 +25,11 @@ protected:
   UFUNCTION()
   void OnHit(UPrimitiveComponent * HitComponent, AActor * OtherActor, UPrimitiveComponent * OtherComponent, FVector NormalImpulse, const FHitResult & Hit);
 
-protected: 
+  // Implement this in cpp
+  UFUNCTION(BlueprintImplementableEvent)
+  void OnObstacleHit(FHitResult Hit);
+
+protected:
 
   UPROPERTY(VisibleDefaultsOnly, Category=Projectile)
   USphereComponent * CollisionComponent;

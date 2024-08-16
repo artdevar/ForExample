@@ -2,11 +2,12 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "Shared/Weapons.h"
 #include "HeroBase.generated.h"
 
 class AWeapon;
 class AHint;
-class APickupableActor;
+class AInteractableActor;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWeaponPickedUpSignature, AWeapon*, Weapon);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWeaponDroppedSignature, AWeapon*, Weapon);
@@ -19,10 +20,10 @@ class FOREXAMPLE_API AHeroBase : public ACharacter
 public:
 
   AHeroBase();
-  
+
   void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-public: 
+  void AddControlRotation(const FRotator & NewRotation);
 
   UFUNCTION(BlueprintCallable)
   void UseButtonPressed();
@@ -36,7 +37,7 @@ public:
   UFUNCTION(BlueprintImplementableEvent, BlueprintPure, Category=Weapon)
   bool IsWeaponAiming() const;
 
-public: 
+  bool IsValid() const;
 
   UPROPERTY(BlueprintAssignable, Category=Weapon)
   FWeaponPickedUpSignature OnWeaponPickedUp;
@@ -46,11 +47,16 @@ public:
 
 protected:
 
+  bool CanJumpInternal_Implementation() const override;
+
+  UFUNCTION(BlueprintCallable)
+  void OnWeaponShoot(FWeaponRecoilParams RecoilParams);
+
   UFUNCTION(BlueprintImplementableEvent, Category=Weapon)
-  void OnWeaponShoot(FVector2D Recoil);
+  void PlayWeaponShootAnimation();
 
   UFUNCTION(BlueprintPure)
-  APickupableActor * GetClosestPickupable(float MaxDistanceSquared) const;
+  AInteractableActor * GetClosestInteractable(float MaxDistanceSquared) const;
 
   UFUNCTION(BlueprintCallable)
   void TryCreateHint();
@@ -68,12 +74,12 @@ protected:
   UPROPERTY(BlueprintReadWrite, EditAnywhere, Category=Stats)
   int32 Health = 0;
 
-  UPROPERTY(EditDefaultsOnly)
-  float PickupableDiscoverDistanceSquared = 0.0f;
+  UPROPERTY(EditDefaultsOnly, Category=Interactable)
+  float InteractableDiscoverDistanceSquared = 0.0f;
 
   UPROPERTY(EditDefaultsOnly, Category = Projectile)
   TSubclassOf<class AHint> HintClass;
 
-  TPair<APickupableActor*, AHint*> HintToPickupable;
+  TPair<AInteractableActor*, AHint*> HintToInteractable;
 
 };

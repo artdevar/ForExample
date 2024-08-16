@@ -1,26 +1,22 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Components/PickupableActor.h"
+#include "Components/InteractableActor.h"
 #include "GameFramework/Actor.h"
+#include "Shared/Weapons.h"
+#include <optional>
 #include "Weapon.generated.h"
 
+class UMyGameInstance;
 class ABulletProjectile;
 class AStaticMeshActor;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWeaponAmmoSignature, int32, CurrentMagAmount);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWeaponShootSignature, FVector2D, Recoil);
-
-UENUM(BlueprintType)
-enum class EWeaponSound : uint8
-{
-  Shoot  UMETA(DisplayName="Shoot"),
-  Reload UMETA(DisplayName="Reload"),
-  NoAmmo UMETA(DisplayName="NoAmmo")
-};
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWeaponShootSignature, FWeaponRecoilParams, RecoilParams);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWeaponFireModeSignature, EWeaponFireMode, FireMode);
 
 UCLASS(Abstract)
-class FOREXAMPLE_API AWeapon : public APickupableActor
+class FOREXAMPLE_API AWeapon : public AInteractableActor
 {
   GENERATED_BODY()
 
@@ -44,6 +40,12 @@ public:
   UFUNCTION(BlueprintPure)
   bool IsReloading() const;
 
+  UFUNCTION(BlueprintCallable)
+  void PlaySound(EWeaponSound SoundType);
+
+  UFUNCTION(BlueprintCallable)
+  void SwitchFireMode();
+
 public: // Animation events
 
   UFUNCTION(BlueprintCallable, Category=Magazine)
@@ -58,7 +60,7 @@ public: // Animation events
 protected:
 
   UFUNCTION(BlueprintImplementableEvent)
-  void PlaySound(EWeaponSound Action);
+  void SpawnShootProjectile();
 
   void ShootProjectile();
 
@@ -70,19 +72,26 @@ protected:
 
 private:
 
-  FVector2D GetRecoil() const;
+  FWeaponRecoilParams GetRecoil() const;
 
   int GetDamage() const;
 
   bool CanBeShoot() const;
+
+  void ApplyFireModeAmmoLimit();
+
+  void ResetFireModeAmmoLimit();
 
 public:
 
   UPROPERTY(BlueprintAssignable, Category=Magazine)
   FWeaponAmmoSignature OnWeaponAmmoChanged;
 
-  UPROPERTY(BlueprintAssignable, Category=Fire)
+  UPROPERTY(BlueprintAssignable, Category=Shooting)
   FWeaponShootSignature OnWeaponShoot;
+
+  UPROPERTY(BlueprintAssignable, Category=Shooting)
+  FWeaponFireModeSignature OnFireModeChanged;
 
 protected:
 
@@ -102,13 +111,22 @@ protected:
   int BaseDamage = 0;
 
   UPROPERTY(EditDefaultsOnly, Category=Shooting)
-  TArray<FVector2D> Recoil;
+  FWeaponRecoilParams RecoilParams;
+
+  UPROPERTY(EditDefaultsOnly, Category=Shooting)
+  TArray<EWeaponFireMode> FireModes;
+
+  UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category=Shooting)
+  EWeaponFireMode FireMode = EWeaponFireMode::Single;
 
   UPROPERTY(EditDefaultsOnly, Category=Projectile)
   TSubclassOf<class ABulletProjectile> ProjectileClass;
 
   UPROPERTY(BlueprintReadWrite)
   UMeshComponent * ModelMesh = nullptr;
+
+  UPROPERTY(BlueprintReadOnly)
+  UMyGameInstance * GameInstance = nullptr;
 
 protected:
 
@@ -117,8 +135,9 @@ protected:
   AStaticMeshActor * m_MagazineActor = nullptr;
   FTimerHandle       m_ShootingTimer;
 
-  bool m_IsShooting           = false;
-  bool m_IsReloading          = false;
-  bool m_NoAmmoEventTriggered = false;
+  bool m_IsShooting  = false;
+  bool m_IsReloading = false;
+
+  std::optional<uint32> m_AmountAmmoToShoot;
 
 };
