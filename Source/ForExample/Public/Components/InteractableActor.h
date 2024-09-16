@@ -36,12 +36,12 @@ public:
   UFUNCTION(BlueprintCallable, Category=Pickupable)
   void OnDropped();
 
-  const FText & GetActorName() const;
+  const FName & GetDisplayName() const;
 
 protected:
 
   UPROPERTY(EditDefaultsOnly)
-  FText Name;
+  FName DisplayName;
 
   UPROPERTY(EditDefaultsOnly, Category=Pickupable)
   EInteractableType Type = EInteractableType::None;

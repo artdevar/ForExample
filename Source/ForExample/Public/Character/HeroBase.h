@@ -23,6 +23,8 @@ public:
 
   void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
+  float TakeDamage(float DamageAmount, struct FDamageEvent const & DamageEvent, class AController * EventInstigator, AActor * DamageCauser) override;
+
   void AddControlRotation(const FRotator & NewRotation);
 
   UFUNCTION(BlueprintCallable)
@@ -38,6 +40,8 @@ public:
   bool IsWeaponAiming() const;
 
   bool IsValid() const;
+
+  void OnNoHealthLeft();
 
   UPROPERTY(BlueprintAssignable, Category=Weapon)
   FWeaponPickedUpSignature OnWeaponPickedUp;
@@ -55,8 +59,7 @@ protected:
   UFUNCTION(BlueprintImplementableEvent, Category=Weapon)
   void PlayWeaponShootAnimation();
 
-  UFUNCTION(BlueprintPure)
-  AInteractableActor * GetClosestInteractable(float MaxDistanceSquared) const;
+  AInteractableActor * GetClosestInteractable() const;
 
   UFUNCTION(BlueprintCallable)
   void TryCreateHint();
@@ -65,21 +68,18 @@ protected:
 
 protected:
 
+  UPROPERTY(EditDefaultsOnly, Category=Interactable)
+  float InteractableDiscoverDistance = 0.0f;
+
+  UPROPERTY(EditDefaultsOnly, Category=Projectile)
+  TSubclassOf<class AHint> HintClass;
+
+  UPROPERTY(EditDefaultsOnly, Category=Weapon)
+  bool ApplyControllerRotationYawWithWeapon = false;
+
   UPROPERTY(BlueprintReadOnly, Category=Weapon)
   AWeapon * Weapon = nullptr;
 
-  UPROPERTY(BlueprintReadWrite, EditAnywhere, Category=Stats)
-  int32 MaxHealth = 0;
-
-  UPROPERTY(BlueprintReadWrite, EditAnywhere, Category=Stats)
-  int32 Health = 0;
-
-  UPROPERTY(EditDefaultsOnly, Category=Interactable)
-  float InteractableDiscoverDistanceSquared = 0.0f;
-
-  UPROPERTY(EditDefaultsOnly, Category = Projectile)
-  TSubclassOf<class AHint> HintClass;
-
-  TPair<AInteractableActor*, AHint*> HintToInteractable;
+  AHint * HintToInteractable = nullptr;
 
 };

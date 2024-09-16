@@ -24,7 +24,7 @@ void AHint::Tick(float DeltaSeconds)
     FaceToHero();
 
   if (IsNeedAttachToInteractable())
-    UpdatePosition();
+    UpdatePosition(DeltaSeconds);
 }
 
 void AHint::UpdateText()
@@ -34,22 +34,24 @@ void AHint::UpdateText()
   APlayerController * PlayerController = GetOwner<ACharacter>()->GetController<APlayerController>();
   const FText Bind = UInput::GetKeyBindedToAction(PlayerController, ActionText->Action);
 
-  SetText(FText::Format(ActionText->Text, Interactable->GetActorName(), Bind));
+  SetText(FText::Format(ActionText->Text, Bind, FText::FromName(Interactable->GetDisplayName())));
 }
 
 void AHint::FaceToHero()
 {
   const FVector HintLocation = GetActorLocation();
-  const auto    HeroCamera   = reinterpret_cast<UCameraComponent*>(GetOwner()->GetComponentByClass(UCameraComponent::StaticClass()));
+  const auto    HeroCamera   = GetOwner()->GetComponentByClass<UCameraComponent>();
 
   const FRotator Rotation = UKismetMathLibrary::FindLookAtRotation(HintLocation, HeroCamera->GetComponentLocation());
   SetActorRotation(Rotation);
 }
 
-void AHint::UpdatePosition()
+void AHint::UpdatePosition(float DeltaSeconds)
 {
-  const FVector PickupablePos = Interactable->GetActorLocation();
-  SetActorLocation(PickupablePos);
+  const FVector CurrentLocation = GetActorLocation();
+  const FVector TargetLocation  = Interactable->GetActorLocation() + PositionDelta;
+
+  SetActorLocation(FMath::VInterpTo(CurrentLocation, TargetLocation, DeltaSeconds, InterpolationSpeed));
 }
 
 void AHint::UpdateOpacity()
@@ -58,7 +60,7 @@ void AHint::UpdateOpacity()
   const FVector HintLocation = GetActorLocation();
 
   const float DistanceBetweenSquared = (HeroLocation - HintLocation).SquaredLength();
-  const float NewOpacity = (DistanceDiscoverableSquared - DistanceBetweenSquared) / (DistanceDiscoverableSquared - (75.0f * 75.0f));
+  const float NewOpacity = (DistanceDiscoverableSquared - DistanceBetweenSquared) / FullOpacityDistanceSquared;
 
   SetTextOpacity(FMath::Clamp(NewOpacity, 0.0f, 1.0f));
 }

@@ -2,7 +2,6 @@
 
 #include "CoreMinimal.h"
 #include "Components/InteractableActor.h"
-#include "GameFramework/Actor.h"
 #include "Shared/Weapons.h"
 #include <optional>
 #include "Weapon.generated.h"
@@ -43,8 +42,12 @@ public:
   UFUNCTION(BlueprintCallable)
   void PlaySound(EWeaponSound SoundType);
 
+  USoundBase * GetSound(EWeaponSound SoundType) const;
+
   UFUNCTION(BlueprintCallable)
   void SwitchFireMode();
+
+  int32 GetDamage(const TSoftObjectPtr<class UPhysicalMaterial> & MaterialHit) const;
 
 public: // Animation events
 
@@ -70,11 +73,11 @@ protected:
 
   void OnNoAmmoLeft();
 
+  virtual void InitFromTable();
+
 private:
 
   FWeaponRecoilParams GetRecoil() const;
-
-  int GetDamage() const;
 
   bool CanBeShoot() const;
 
@@ -95,38 +98,32 @@ public:
 
 protected:
 
+  UPROPERTY(EditDefaultsOnly, meta=(RowType=WeaponData), Category=Data)
+  FDataTableRowHandle WeaponDataHandle;
+
+  UPROPERTY(EditDefaultsOnly, Category = Projectile)
+  TSubclassOf<class ABulletProjectile> ProjectileClass;
+
   UPROPERTY(EditDefaultsOnly, Category=Magazine)
   TSubclassOf<class AStaticMeshActor> MagazineClass;
 
-  UPROPERTY(EditDefaultsOnly, Category=Magazine)
-  int32 MagazineAmount = 0;
-
-  UPROPERTY(BlueprintReadOnly, Category=Magazine)
+  UPROPERTY(BlueprintReadOnly, Category = Magazine)
   int32 CurrentMagazineAmount = 0;
-
-  UPROPERTY(EditDefaultsOnly, Category=Shooting)
-  float FireRate = 0.001f;
-
-  UPROPERTY(EditDefaultsOnly, Category=Shooting)
-  int BaseDamage = 0;
-
-  UPROPERTY(EditDefaultsOnly, Category=Shooting)
-  FWeaponRecoilParams RecoilParams;
-
-  UPROPERTY(EditDefaultsOnly, Category=Shooting)
-  TArray<EWeaponFireMode> FireModes;
-
-  UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category=Shooting)
-  EWeaponFireMode FireMode = EWeaponFireMode::Single;
-
-  UPROPERTY(EditDefaultsOnly, Category=Projectile)
-  TSubclassOf<class ABulletProjectile> ProjectileClass;
 
   UPROPERTY(BlueprintReadWrite)
   UMeshComponent * ModelMesh = nullptr;
 
   UPROPERTY(BlueprintReadOnly)
-  UMyGameInstance * GameInstance = nullptr;
+  EWeaponFireMode FireMode = EWeaponFireMode::Single;
+
+protected: // Data table
+
+  TMap<EWeaponSound, FSoundsSet>                 * Sounds         = nullptr;
+  TMap<TSoftObjectPtr<UPhysicalMaterial>, int32> * HitboxDamage   = nullptr;
+  TArray<EWeaponFireMode>                        * FireModes      = nullptr;
+  FWeaponRecoilParams                            * RecoilParams   = nullptr;
+  float                                            FireRate       = 0.1f;
+  int32                                            MagazineAmount = 0;
 
 protected:
 

@@ -1,6 +1,8 @@
 #include "Character/HeroBase.h"
+#include "Character/HeroState.h"
 #include "Weapon/Weapon.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/SphereComponent.h"
 #include "Components/Hint.h"
 #include "Weapon/RecoilHandler.h"
 #include "Math/UnrealMathUtility.h"
@@ -18,6 +20,13 @@ void AHeroBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
   Super::EndPlay(EndPlayReason);
 }
 
+float AHeroBase::TakeDamage(float DamageAmount, struct FDamageEvent const & DamageEvent, class AController * EventInstigator, AActor * DamageCauser)
+{
+  const float DamageApplied = Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
+  GetPlayerState<AHeroState>()->DecreaseHealth(FMath::RoundToInt32(DamageApplied));
+  return DamageApplied;
+}
+
 void AHeroBase::AddControlRotation(const FRotator & NewRotation)
 {
   GetController()->SetControlRotation(GetControlRotation() + NewRotation);
@@ -25,7 +34,7 @@ void AHeroBase::AddControlRotation(const FRotator & NewRotation)
 
 void AHeroBase::UseButtonPressed()
 {
-  AInteractableActor * NearestInteractable = HintToInteractable.Key;
+  AInteractableActor * NearestInteractable = HintToInteractable ? HintToInteractable->Interactable : nullptr;
   if (NearestInteractable == nullptr)
     return;
 
@@ -37,16 +46,19 @@ void AHeroBase::UseButtonPressed()
         DropWeapon();
 
       Weapon = Cast<AWeapon>(NearestInteractable);
+      Weapon->GetComponentByClass<USphereComponent>()->SetSimulatePhysics(false);
       Weapon->SetOwner(this);
       Weapon->OnPickedUp();
       Weapon->OnWeaponShoot.AddDynamic(this, &AHeroBase::OnWeaponShoot);
 
-      reinterpret_cast<URecoilHandler *>(GetComponentByClass(URecoilHandler::StaticClass()))->Activate(true);
+      GetComponentByClass<URecoilHandler>()->Activate(true);
 
       const FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepWorld, true);
       Weapon->AttachToComponent(GetMesh(), AttachmentRules, TEXT("weapon_socket"));
 
       OnWeaponPickedUp.Broadcast(Weapon);
+
+      bUseControllerRotationYaw = ApplyControllerRotationYawWithWeapon;
 
       break;
     }
@@ -55,7 +67,7 @@ void AHeroBase::UseButtonPressed()
       break;
   }
 
-  TryDestroyHint();
+  TryCreateHint();
 }
 
 void AHeroBase::DropWeapon()
@@ -63,28 +75,42 @@ void AHeroBase::DropWeapon()
   if (!HasWeapon())
     return;
 
-  const FDetachmentTransformRules DetachmentRules(EDetachmentRule::KeepRelative, false);
+  const FDetachmentTransformRules DetachmentRules(EDetachmentRule::KeepWorld, false);
   Weapon->DetachFromActor(DetachmentRules);
+  Weapon->GetComponentByClass<USphereComponent>()->SetSimulatePhysics(true);
+  Weapon->OnDropped();
+  Weapon->SetPickupable(false);
 
   Weapon->OnWeaponShoot.RemoveDynamic(this, &AHeroBase::OnWeaponShoot);
   Weapon->SetOwner(nullptr);
 
   OnWeaponDropped.Broadcast(Weapon);
 
-  reinterpret_cast<URecoilHandler *>(GetComponentByClass(URecoilHandler::StaticClass()))->Deactivate();
+  FTimerHandle Timer;
+  GetWorld()->GetTimerManager().SetTimer(Timer, [WeaponPtr = Weapon]()
+  {
+    WeaponPtr->SetPickupable(true);
+  }, 1.0f, false);
 
-  Weapon->Destroy();
+  GetComponentByClass<URecoilHandler>()->Deactivate();
+
   Weapon = nullptr;
+  bUseControllerRotationYaw = false;
 }
 
 bool AHeroBase::HasWeapon() const
 {
-  return Weapon != nullptr;
+  return Weapon && Weapon->IsPickedUp();
 }
 
 bool AHeroBase::IsValid() const
 {
   return ::IsValid(this);
+}
+
+void AHeroBase::OnNoHealthLeft()
+{
+
 }
 
 bool AHeroBase::CanJumpInternal_Implementation() const
@@ -94,32 +120,38 @@ bool AHeroBase::CanJumpInternal_Implementation() const
 
 void AHeroBase::OnWeaponShoot(FWeaponRecoilParams RecoilParams)
 {
-  auto RecoilHandler = reinterpret_cast<URecoilHandler *>(GetComponentByClass(URecoilHandler::StaticClass()));
+  auto RecoilHandler = GetComponentByClass<URecoilHandler>();
   RecoilHandler->Add(RecoilParams);
   PlayWeaponShootAnimation();
 }
 
-AInteractableActor * AHeroBase::GetClosestInteractable(float MaxDistanceSquared) const
+AInteractableActor * AHeroBase::GetClosestInteractable() const
 {
-  const FVector HeroLocation = GetActorLocation();
+  const FVector HeroLocation            = GetActorLocation();
+  const float   DiscoverDistanceSquared = InteractableDiscoverDistance * InteractableDiscoverDistance;
 
-  AInteractableActor * Interactable = nullptr;
-  float ClosestDistance = FLT_MAX;
+  FCollisionShape      Sphere          = FCollisionShape::MakeSphere(InteractableDiscoverDistance);
+  AInteractableActor * Interactable    = nullptr;
+  float                ClosestDistance = FLT_MAX;
 
-  TArray<AActor *> AllInteractables;
-  UGameplayStatics::GetAllActorsOfClass(GetWorld(), AInteractableActor::StaticClass(), AllInteractables);
+  TArray<FOverlapResult> OverlapResults;
+  FCollisionQueryParams QueryParams;
+  QueryParams.AddIgnoredActor(this);
 
-  for (AActor * Actor : AllInteractables)
+  GetWorld()->OverlapMultiByChannel(OverlapResults, GetActorLocation(), FQuat::Identity, ECC_Visibility, Sphere, QueryParams);
+
+  for (const FOverlapResult & Result : OverlapResults)
   {
-    const float DistanceDeltaSquared = (Actor->GetActorLocation() - HeroLocation).SquaredLength();
+    AActor * Actor = Result.GetActor();
 
-    if (DistanceDeltaSquared > MaxDistanceSquared)
+    const float DistanceDeltaSquared = (Actor->GetActorLocation() - HeroLocation).SquaredLength();
+    if (DistanceDeltaSquared > DiscoverDistanceSquared)
       continue;
 
     if (DistanceDeltaSquared < ClosestDistance)
     {
-      if (AInteractableActor * InteractableActor = reinterpret_cast<AInteractableActor *>(Actor);
-         !InteractableActor->IsPickedUp())
+      if (AInteractableActor * InteractableActor = Cast<AInteractableActor>(Actor);
+          InteractableActor && InteractableActor->IsPickupable())
       {
         Interactable    = InteractableActor;
         ClosestDistance = DistanceDeltaSquared;
@@ -132,35 +164,37 @@ AInteractableActor * AHeroBase::GetClosestInteractable(float MaxDistanceSquared)
 
 void AHeroBase::TryCreateHint()
 {
-  AInteractableActor * ClosestInteractable = GetClosestInteractable(InteractableDiscoverDistanceSquared);
-  if (ClosestInteractable == HintToInteractable.Key)
-    return;
+  AInteractableActor * ClosestInteractable = GetClosestInteractable();
 
-  TryDestroyHint();
-
-  if (ClosestInteractable == nullptr)
+  if (!ClosestInteractable)
+  {
+    TryDestroyHint();
     return;
+  }
+
+  if (HintToInteractable)
+  {
+    HintToInteractable->Interactable = ClosestInteractable;
+    return;
+  }
 
   FActorSpawnParameters HintSpawnParams;
   HintSpawnParams.Owner = this;
+  HintSpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-  AHint * Hint = GetWorld()->SpawnActor<AHint>(HintClass, ClosestInteractable->GetTransform(), HintSpawnParams);
-  Hint->HintAction                  = EHintAction::Pickup;
-  Hint->Interactable                = ClosestInteractable;
-  Hint->IsAttachedToInteractable    = true;
-  Hint->NeedFacing                  = true;
-  Hint->DistanceDiscoverableSquared = InteractableDiscoverDistanceSquared;
-
-  HintToInteractable.Key   = ClosestInteractable;
-  HintToInteractable.Value = Hint;
+  HintToInteractable = GetWorld()->SpawnActor<AHint>(HintClass, ClosestInteractable->GetTransform(), HintSpawnParams);
+  HintToInteractable->HintAction                  = EHintAction::Pickup;
+  HintToInteractable->Interactable                = ClosestInteractable;
+  HintToInteractable->IsAttachedToInteractable    = true;
+  HintToInteractable->NeedFacing                  = true;
+  HintToInteractable->DistanceDiscoverableSquared = InteractableDiscoverDistance * InteractableDiscoverDistance;
 }
 
 void AHeroBase::TryDestroyHint()
 {
-  if (HintToInteractable.Value == nullptr)
-    return;
-
-  HintToInteractable.Value->Destroy();
-  HintToInteractable.Value = nullptr;
-  HintToInteractable.Key   = nullptr;
+  if (HintToInteractable)
+  {
+    HintToInteractable->Destroy();
+    HintToInteractable = nullptr;
+  }
 }

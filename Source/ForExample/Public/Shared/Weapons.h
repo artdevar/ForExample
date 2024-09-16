@@ -32,7 +32,10 @@ enum class EWeaponSound : uint8
   Reload_1       UMETA(DisplayName="Reload_1"),
   Reload_2       UMETA(DisplayName="Reload_2"),
   Reload_3       UMETA(DisplayName="Reload_3"),
-  FireModeSwitch UMETA(DisplayName="FireModeSwitch")
+  FireModeSwitch UMETA(DisplayName="FireModeSwitch"),
+  ObstacleHit    UMETA(DisplayName="ObstacleHit"),
+  BodyHit        UMETA(DisplayName="BodyHit"),
+  Whip           UMETA(DisplayName="Whip")
 };
 
 UENUM(BlueprintType)
@@ -41,6 +44,17 @@ enum class EWeaponFireMode : uint8
   Single    UMETA(DisplayName="Single"),
   Burst     UMETA(DisplayName="Burst"),
   Automatic UMETA(DisplayName="Automatic")
+};
+
+USTRUCT(BlueprintType)
+struct FSoundsSet
+{
+  GENERATED_BODY()
+
+public:
+
+  UPROPERTY(EditDefaultsOnly)
+  TArray<TSoftObjectPtr<USoundBase>> Sounds;
 };
 
 UCLASS()

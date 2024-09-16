@@ -18,16 +18,16 @@ public:
 
   void SetDirection(const FVector & Direction);
 
-  void SetDamage(int Damage);
-
 protected:
+
+  void BeginPlay() override;
 
   UFUNCTION()
   void OnHit(UPrimitiveComponent * HitComponent, AActor * OtherActor, UPrimitiveComponent * OtherComponent, FVector NormalImpulse, const FHitResult & Hit);
 
   // Implement this in cpp
   UFUNCTION(BlueprintImplementableEvent)
-  void OnObstacleHit(FHitResult Hit);
+  void OnObstacleHit(const FHitResult & Hit);
 
 protected:
 
@@ -36,7 +36,5 @@ protected:
 
   UPROPERTY(VisibleAnywhere, Category=Movement)
   UProjectileMovementComponent * ProjectileMovementComponent;
-
-  int m_Damage;
 
 };

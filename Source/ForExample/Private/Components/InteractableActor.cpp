@@ -30,7 +30,7 @@ void AInteractableActor::OnDropped()
   m_IsPickedUp = false;
 }
 
-const FText & AInteractableActor::GetActorName() const
+const FName & AInteractableActor::GetDisplayName() const
 {
-  return Name;
+  return DisplayName;
 }

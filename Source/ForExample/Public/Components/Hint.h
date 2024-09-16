@@ -52,7 +52,7 @@ protected:
 
   void FaceToHero();
 
-  void UpdatePosition();
+  void UpdatePosition(float DeltaSeconds);
 
   void UpdateOpacity();
 
@@ -64,6 +64,15 @@ protected:
 
   UPROPERTY(EditDefaultsOnly)
   TMap<EHintAction, FActionText> ActionTextWithBind;
+
+  UPROPERTY(EditDefaultsOnly)
+  FVector PositionDelta;
+
+  UPROPERTY(EditDefaultsOnly)
+  float FullOpacityDistanceSquared = 0.0f;
+
+  UPROPERTY(EditDefaultsOnly)
+  float InterpolationSpeed = 0.0f;
 
 public:
 
