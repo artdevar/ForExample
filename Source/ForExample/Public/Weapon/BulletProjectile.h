@@ -25,9 +25,11 @@ protected:
   UFUNCTION()
   void OnHit(UPrimitiveComponent * HitComponent, AActor * OtherActor, UPrimitiveComponent * OtherComponent, FVector NormalImpulse, const FHitResult & Hit);
 
-  // Implement this in cpp
   UFUNCTION(BlueprintImplementableEvent)
   void OnObstacleHit(const FHitResult & Hit);
+
+  UFUNCTION(BlueprintImplementableEvent)
+  void OnCharacterHit(const FHitResult & Hit);
 
 protected:
 

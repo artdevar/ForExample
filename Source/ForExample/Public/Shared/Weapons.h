@@ -57,6 +57,12 @@ public:
   TArray<TSoftObjectPtr<USoundBase>> Sounds;
 };
 
+UCLASS(MinimalAPI, const, Blueprintable, BlueprintType)
+class UBulletDamageType : public UDamageType
+{
+  GENERATED_UCLASS_BODY()
+};
+
 UCLASS()
 class FOREXAMPLE_API UWeapons : public UBlueprintFunctionLibrary
 {

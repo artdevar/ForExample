@@ -27,14 +27,17 @@ public:
   UFUNCTION(BlueprintPure, Category=Pickupable)
   bool IsPickupable() const;
 
+  UFUNCTION(BlueprintPure, Category=Pickupable)
+  bool IsDroppable() const;
+
   UFUNCTION(BlueprintCallable, Category=Pickupable)
   void SetPickupable(bool IsPickupable);
 
   UFUNCTION(BlueprintCallable, Category=Pickupable)
-  void OnPickedUp();
+  virtual void OnPickedUp();
 
   UFUNCTION(BlueprintCallable, Category=Pickupable)
-  void OnDropped();
+  virtual void OnDropped();
 
   const FName & GetDisplayName() const;
 
@@ -46,7 +49,7 @@ protected:
   UPROPERTY(EditDefaultsOnly, Category=Pickupable)
   EInteractableType Type = EInteractableType::None;
 
-  bool m_IsPickedUp = false;
-  bool m_IsPickupable = true;
+  bool bIsPickedUp   = false;
+  bool bIsPickupable = true;
 
 };

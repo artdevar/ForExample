@@ -25,6 +25,8 @@ public:
 
   void BeginPlay() override;
 
+  void OnDropped() override;
+
 public:
 
   UFUNCTION(BlueprintCallable)
@@ -38,6 +40,9 @@ public:
 
   UFUNCTION(BlueprintPure)
   bool IsReloading() const;
+
+  UFUNCTION(BlueprintPure)
+  bool IsMagazineExtracted() const;
 
   UFUNCTION(BlueprintCallable)
   void PlaySound(EWeaponSound SoundType);
@@ -132,8 +137,8 @@ protected:
   AStaticMeshActor * m_MagazineActor = nullptr;
   FTimerHandle       m_ShootingTimer;
 
-  bool m_IsShooting  = false;
-  bool m_IsReloading = false;
+  bool bIsShooting  = false;
+  bool bIsReloading = false;
 
   std::optional<uint32> m_AmountAmmoToShoot;
 

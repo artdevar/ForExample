@@ -36,17 +36,22 @@ void ABulletProjectile::BeginPlay()
 
 void ABulletProjectile::OnHit(UPrimitiveComponent * HitComponent, AActor * OtherActor, UPrimitiveComponent * OtherComponent, FVector NormalImpulse, const FHitResult & Hit)
 {
-  const bool IsCharacterHit = OtherActor && OtherActor->IsA<ACharacter>();
-  const auto Weapon         = GetOwner<AWeapon>();
+  const bool    IsCharacterHit = OtherActor && OtherActor->IsA<ACharacter>();
+  const auto    Weapon         = GetOwner<AWeapon>();
+  const int32   Damage         = Weapon->GetDamage(Hit.PhysMaterial.Get());
+  const FVector HitFrom        = ProjectileMovementComponent->Velocity.GetSafeNormal();
 
   USoundBase * HitSound = Weapon->GetSound(IsCharacterHit ? EWeaponSound::BodyHit : EWeaponSound::ObstacleHit);
 
-  OnObstacleHit(Hit);
-  UGameplayStatics::ApplyPointDamage(OtherActor, Weapon->GetDamage(Hit.PhysMaterial.Get()), ProjectileMovementComponent->Velocity.GetSafeNormal(), Hit, GetInstigatorController(), GetOwner(), nullptr);
+  if (IsCharacterHit)
+    OnCharacterHit(Hit);
+  else
+    OnObstacleHit(Hit);
+
+  UGameplayStatics::ApplyPointDamage(OtherActor, Damage, HitFrom, Hit, GetInstigatorController(), GetOwner(), UBulletDamageType::StaticClass());
   UGameplayStatics::PlaySoundAtLocation(GetWorld(), HitSound, Hit.ImpactPoint);
 
-  GEngine->AddOnScreenDebugMessage(-1, 5, FColor::Blue, Hit.PhysMaterial->GetName(), true, FVector2D(2.f));
-  GEngine->AddOnScreenDebugMessage(-1, 5, FColor::Cyan, FString::FromInt(Weapon->GetDamage(Hit.PhysMaterial.Get())), true, FVector2D(2.5f));
+  GEngine->AddOnScreenDebugMessage(-1, 5, FColor::Blue, Hit.PhysMaterial->GetName(), false);
 
   Destroy();
 }

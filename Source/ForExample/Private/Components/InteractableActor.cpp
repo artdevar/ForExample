@@ -7,27 +7,32 @@ EInteractableType AInteractableActor::GetType() const
 
 bool AInteractableActor::IsPickedUp() const
 {
-  return m_IsPickedUp;
+  return bIsPickedUp;
 }
 
 bool AInteractableActor::IsPickupable() const
 {
-  return m_IsPickupable && !IsPickedUp();
+  return bIsPickupable && !IsPickedUp();
+}
+
+bool AInteractableActor::IsDroppable() const
+{
+  return true;
 }
 
 void AInteractableActor::SetPickupable(bool IsPickupable)
 {
-  m_IsPickupable = IsPickupable;
+  bIsPickupable = IsPickupable;
 }
 
 void AInteractableActor::OnPickedUp()
 {
-  m_IsPickedUp = true;
+  bIsPickedUp = true;
 }
 
 void AInteractableActor::OnDropped()
 {
-  m_IsPickedUp = false;
+  bIsPickedUp = false;
 }
 
 const FName & AInteractableActor::GetDisplayName() const

@@ -33,6 +33,13 @@ void AWeapon::BeginPlay()
   OnWeaponAmmoChanged.Broadcast(CurrentMagazineAmount);
 }
 
+void AWeapon::OnDropped()
+{
+  bIsReloading = false;
+
+  Super::OnDropped();
+}
+
 void AWeapon::StartShooting()
 {
   if (IsReloading())
@@ -44,7 +51,7 @@ void AWeapon::StartShooting()
     return;
   }
 
-  m_IsShooting = true;
+  bIsShooting = true;
   ApplyFireModeAmmoLimit();
 
   GetWorldTimerManager().SetTimer(m_ShootingTimer, this, &AWeapon::Shoot, FireRate, true);
@@ -55,7 +62,7 @@ void AWeapon::StopShooting()
 {
   GetWorldTimerManager().ClearTimer(m_ShootingTimer);
 
-  m_IsShooting = false;
+  bIsShooting = false;
   ResetFireModeAmmoLimit();
 }
 
@@ -133,12 +140,17 @@ void AWeapon::InitFromTable()
 void AWeapon::Reload()
 {
   StopShooting();
-  m_IsReloading = true;
+  bIsReloading = true;
 }
 
 bool AWeapon::IsReloading() const
 {
-  return m_IsReloading;
+  return bIsReloading;
+}
+
+bool AWeapon::IsMagazineExtracted() const
+{
+  return CurrentMagazineAmount == INVALID_AMMO_AMOUNT;
 }
 
 void AWeapon::PlaySound(EWeaponSound SoundType)
@@ -225,7 +237,7 @@ void AWeapon::OnMagazineInserted()
 
   CurrentMagazineAmount = MagazineAmount;
   OnWeaponAmmoChanged.Broadcast(CurrentMagazineAmount);
-  m_IsReloading = false;
+  bIsReloading = false;
 
   PlaySound(EWeaponSound::Reload_3);
 }
