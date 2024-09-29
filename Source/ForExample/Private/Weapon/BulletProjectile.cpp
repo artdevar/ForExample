@@ -8,6 +8,7 @@
 ABulletProjectile::ABulletProjectile()
 {
   PrimaryActorTick.bCanEverTick = true;
+  bReplicates = true;
 
   CollisionComponent = CreateDefaultSubobject<USphereComponent>(TEXT("SphereComponent"));
   CollisionComponent->BodyInstance.SetCollisionProfileName(TEXT("Projectile"));
@@ -31,11 +32,25 @@ void ABulletProjectile::BeginPlay()
 {
   Super::BeginPlay();
 
-  SetLifeSpan(10);
+  CollisionComponent->IgnoreActorWhenMoving(GetOwner(),             true); // Weapon
+  CollisionComponent->IgnoreActorWhenMoving(GetOwner()->GetOwner(), true); // Weapon carrier
+
+  SetLifeSpan(15);
+}
+
+void ABulletProjectile::SetDirection(const FVector & Direction)
+{
+  ProjectileMovementComponent->Velocity = ProjectileMovementComponent->InitialSpeed * Direction;
 }
 
 void ABulletProjectile::OnHit(UPrimitiveComponent * HitComponent, AActor * OtherActor, UPrimitiveComponent * OtherComponent, FVector NormalImpulse, const FHitResult & Hit)
 {
+  if (!HasAuthority())
+  {
+    Destroy();
+    return;
+  }
+
   const bool    IsCharacterHit = OtherActor && OtherActor->IsA<ACharacter>();
   const auto    Weapon         = GetOwner<AWeapon>();
   const int32   Damage         = Weapon->GetDamage(Hit.PhysMaterial.Get());
@@ -43,20 +58,30 @@ void ABulletProjectile::OnHit(UPrimitiveComponent * HitComponent, AActor * Other
 
   USoundBase * HitSound = Weapon->GetSound(IsCharacterHit ? EWeaponSound::BodyHit : EWeaponSound::ObstacleHit);
 
-  if (IsCharacterHit)
-    OnCharacterHit(Hit);
-  else
-    OnObstacleHit(Hit);
-
   UGameplayStatics::ApplyPointDamage(OtherActor, Damage, HitFrom, Hit, GetInstigatorController(), GetOwner(), UBulletDamageType::StaticClass());
   UGameplayStatics::PlaySoundAtLocation(GetWorld(), HitSound, Hit.ImpactPoint);
 
-  GEngine->AddOnScreenDebugMessage(-1, 5, FColor::Blue, Hit.PhysMaterial->GetName(), false);
+  if (IsCharacterHit)
+    Multicast_OnCharacterHit(Hit);
+  else
+    Multicast_OnObstacleHit(Hit);
 
-  Destroy();
+  SetActorHiddenInGame(true);
+  SetActorEnableCollision(false);
+  SetActorTickEnabled(false);
+
+  auto LogStr = FString::Format(TEXT("HIT INFO: {0}; {1}; {2}."), {Hit.PhysMaterial->GetName(), OtherActor->GetDebugName(OtherActor), Damage});
+  GEngine->AddOnScreenDebugMessage(-1, 5, FColor::Yellow, LogStr, false);
 }
 
-void ABulletProjectile::SetDirection(const FVector & Direction)
+void ABulletProjectile::Multicast_OnObstacleHit_Implementation(const FHitResult & Hit)
 {
-  ProjectileMovementComponent->Velocity = ProjectileMovementComponent->InitialSpeed * Direction;
+  if (!HasAuthority())
+    OnObstacleHit(Hit);
+}
+
+void ABulletProjectile::Multicast_OnCharacterHit_Implementation(const FHitResult & Hit)
+{
+  if (!HasAuthority())
+    OnCharacterHit(Hit);
 }

@@ -8,6 +8,7 @@
 AHint::AHint()
 {
   PrimaryActorTick.bCanEverTick = true;
+  bReplicates = false;
 }
 
 void AHint::Tick(float DeltaSeconds)

@@ -11,45 +11,50 @@ enum class EInteractableType : uint8
   Weapon UMETA(DisplayName = Weapon)
 };
 
-UCLASS()
+UCLASS(Abstract)
 class FOREXAMPLE_API AInteractableActor : public AActor
 {
   GENERATED_BODY()
 
 public:
 
+  void GetLifetimeReplicatedProps(TArray<FLifetimeProperty> & OutLifetimeProps) const override;
+
+  const FName & GetDisplayName() const;
+
   UFUNCTION(BlueprintPure)
   EInteractableType GetType() const;
 
-  UFUNCTION(BlueprintPure, Category=Pickupable)
+  UFUNCTION(BlueprintPure)
   bool IsPickedUp() const;
 
-  UFUNCTION(BlueprintPure, Category=Pickupable)
+  UFUNCTION(BlueprintPure)
   bool IsPickupable() const;
 
-  UFUNCTION(BlueprintPure, Category=Pickupable)
-  bool IsDroppable() const;
+  UFUNCTION(BlueprintPure)
+  virtual bool IsDroppable() const;
 
-  UFUNCTION(BlueprintCallable, Category=Pickupable)
+  UFUNCTION(Server, Reliable)
   void SetPickupable(bool IsPickupable);
 
-  UFUNCTION(BlueprintCallable, Category=Pickupable)
+  UFUNCTION(Server, Reliable)
   virtual void OnPickedUp();
 
-  UFUNCTION(BlueprintCallable, Category=Pickupable)
+  UFUNCTION(Server, Reliable)
   virtual void OnDropped();
-
-  const FName & GetDisplayName() const;
 
 protected:
 
   UPROPERTY(EditDefaultsOnly)
   FName DisplayName;
 
-  UPROPERTY(EditDefaultsOnly, Category=Pickupable)
+  UPROPERTY(EditDefaultsOnly)
   EInteractableType Type = EInteractableType::None;
 
-  bool bIsPickedUp   = false;
+  UPROPERTY(Replicated)
+  bool bIsPickedUp = false;
+
+  UPROPERTY(Replicated)
   bool bIsPickupable = true;
 
 };

@@ -11,18 +11,31 @@ class FOREXAMPLE_API AHeroState : public APlayerState
 
 public:
 
-  void GetLifetimeReplicatedProps(TArray<FLifetimeProperty> & OutLifetimeProps) const override;
+  AHeroState();
 
   void Reset() override;
 
+  void IncreaseHealth(int32 Amount);
+
   void DecreaseHealth(int32 Amount);
+
+protected:
+
+//
+// Replication
+//
+
+  void GetLifetimeReplicatedProps(TArray<FLifetimeProperty> & OutLifetimeProps) const override;
+
+  UFUNCTION()
+  void OnRep_HealthChanged();
 
 public:
 
-  UPROPERTY(BlueprintReadWrite, EditAnywhere)
+  UPROPERTY(BlueprintReadWrite, EditAnywhere, Replicated)
   int32 MaxHealth = 0;
 
-  UPROPERTY(BlueprintReadWrite, EditAnywhere, Replicated)
+  UPROPERTY(BlueprintReadWrite, EditAnywhere, ReplicatedUsing=OnRep_HealthChanged)
   int32 Health = 0;
 
 };

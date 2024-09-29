@@ -1,4 +1,18 @@
 #include "Components/InteractableActor.h"
+#include "Net/UnrealNetwork.h"
+
+void AInteractableActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty> & OutLifetimeProps) const
+{
+  Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+  DOREPLIFETIME(AInteractableActor, bIsPickedUp);
+  DOREPLIFETIME(AInteractableActor, bIsPickupable);
+}
+
+const FName & AInteractableActor::GetDisplayName() const
+{
+  return DisplayName;
+}
 
 EInteractableType AInteractableActor::GetType() const
 {
@@ -17,25 +31,20 @@ bool AInteractableActor::IsPickupable() const
 
 bool AInteractableActor::IsDroppable() const
 {
-  return true;
+  return IsPickedUp();
 }
 
-void AInteractableActor::SetPickupable(bool IsPickupable)
+void AInteractableActor::SetPickupable_Implementation(bool IsPickupable)
 {
   bIsPickupable = IsPickupable;
 }
 
-void AInteractableActor::OnPickedUp()
+void AInteractableActor::OnPickedUp_Implementation()
 {
   bIsPickedUp = true;
 }
 
-void AInteractableActor::OnDropped()
+void AInteractableActor::OnDropped_Implementation()
 {
   bIsPickedUp = false;
-}
-
-const FName & AInteractableActor::GetDisplayName() const
-{
-  return DisplayName;
 }

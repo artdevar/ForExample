@@ -7,12 +7,14 @@
 #include "Engine/StaticMeshActor.h"
 #include "Data/WeaponData.h"
 #include "Kismet/GameplayStatics.h"
+#include "Net/UnrealNetwork.h"
 
 const int32 AWeapon::INVALID_AMMO_AMOUNT = -1;
 
 AWeapon::AWeapon()
 {
   PrimaryActorTick.bCanEverTick = true;
+  bReplicates = true;
 }
 
 void AWeapon::BeginPlay()
@@ -24,13 +26,8 @@ void AWeapon::BeginPlay()
   FireMode = FireModes->Contains(EWeaponFireMode::Automatic) ? EWeaponFireMode::Automatic :
              FireModes->Contains(EWeaponFireMode::Burst)     ? EWeaponFireMode::Burst     : EWeaponFireMode::Single;
 
-  const FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, true);
-
-  m_MagazineActor = GetWorld()->SpawnActor<AStaticMeshActor>(MagazineClass);
-  m_MagazineActor->AttachToComponent(ModelMesh, AttachmentRules, TEXT("Magazine"));
-
-  CurrentMagazineAmount = MagazineAmount;
-  OnWeaponAmmoChanged.Broadcast(CurrentMagazineAmount);
+  CurrentMagAmount = FMath::RandRange(MagazineAmount / 3, MagazineAmount);
+  OnWeaponAmmoChanged.Broadcast(CurrentMagAmount);
 }
 
 void AWeapon::OnDropped()
@@ -38,6 +35,11 @@ void AWeapon::OnDropped()
   bIsReloading = false;
 
   Super::OnDropped();
+}
+
+bool AWeapon::IsDroppable() const
+{
+  return Super::IsDroppable() && !IsReloading();
 }
 
 void AWeapon::StartShooting()
@@ -51,23 +53,153 @@ void AWeapon::StartShooting()
     return;
   }
 
-  bIsShooting = true;
-  ApplyFireModeAmmoLimit();
-
-  GetWorldTimerManager().SetTimer(m_ShootingTimer, this, &AWeapon::Shoot, FireRate, true);
-  Shoot();
+  Server_StartShooting();
 }
 
 void AWeapon::StopShooting()
 {
-  GetWorldTimerManager().ClearTimer(m_ShootingTimer);
-
-  bIsShooting = false;
-  ResetFireModeAmmoLimit();
+  Server_StopShooting();
 }
 
-void AWeapon::Shoot()
+void AWeapon::OnNoAmmoLeft()
 {
+  PlaySound(EWeaponSound::NoAmmo);
+}
+
+void AWeapon::InitFromTable()
+{
+  FWeaponData * Data = WeaponDataHandle.GetRow<FWeaponData>("No data");
+  checkf(Data, TEXT("The table isn't assigned"));
+
+  Sounds         = &Data->SoundsSet;
+  HitboxDamage   = &Data->HitboxDamage;
+  RecoilParams   = &Data->RecoilParams;
+  FireModes      = &Data->FireModes;
+  FireRate       = Data->FireRate;
+  MagazineAmount = Data->MagazineAmount;
+}
+
+void AWeapon::Reload()
+{
+  Server_Reload();
+}
+
+bool AWeapon::IsReloading() const
+{
+  return bIsReloading;
+}
+
+bool AWeapon::IsMagazineExtracted() const
+{
+  return CurrentMagAmount == INVALID_AMMO_AMOUNT;
+}
+
+USoundBase * AWeapon::GetSound(EWeaponSound SoundType) const
+{
+  FSoundsSet * SoundsSet = Sounds->Find(SoundType);
+  if (!SoundsSet || SoundsSet->Sounds.IsEmpty())
+    return nullptr;
+
+  return SoundsSet->Sounds[FMath::RandRange(0, SoundsSet->Sounds.Num() - 1)].Get();
+}
+
+void AWeapon::SwitchFireMode()
+{
+  Server_SwitchFireMode();
+}
+
+int32 AWeapon::GetDamage(const TSoftObjectPtr<class UPhysicalMaterial> & MaterialHit) const
+{
+  ensure(HasAuthority());
+
+  const int32 * Damage = HitboxDamage->Find(MaterialHit);
+  if (!Damage)
+  {
+    UE_LOG(LogCore, Warning, TEXT("No damage set for %s"), *MaterialHit->GetName());
+    return 0;
+  }
+
+  return *Damage + FMath::RandRange(-*Damage / 10, *Damage / 10);
+}
+
+void AWeapon::OnMagazineExtracted()
+{
+  if (HasAuthority())
+  {
+    CurrentMagAmount = INVALID_AMMO_AMOUNT;
+    Client_MagAmountChanged(CurrentMagAmount);
+  }
+
+  //verify(m_MagazineActor);
+  //UStaticMeshComponent * MagazineMesh = m_MagazineActor->GetStaticMeshComponent();
+  //
+  //const FDetachmentTransformRules DetachmentRules(EDetachmentRule::KeepWorld, true);
+  //MagazineMesh->DetachFromComponent(DetachmentRules);
+  //MagazineMesh->SetSimulatePhysics(true);
+  //
+  //m_MagazineActor->SetLifeSpan(30);
+  //m_MagazineActor = nullptr;
+  //
+  //PlaySound(EWeaponSound::Reload_1);
+}
+
+void AWeapon::OnMagazineTaken()
+{
+  //auto HeroMesh = GetOwner<ACharacter>()->GetMesh();
+  //
+  //const FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, true);
+  //
+  //m_MagazineActor = GetWorld()->SpawnActor<AStaticMeshActor>(MagazineClass);
+  //m_MagazineActor->AttachToComponent(HeroMesh, AttachmentRules, TEXT("magazine_socket"));
+  //
+  //PlaySound(EWeaponSound::Reload_2);
+}
+
+void AWeapon::OnMagazineInserted()
+{
+  if (HasAuthority())
+  {
+    CurrentMagAmount = MagazineAmount;
+    bIsReloading = false;
+    Client_MagAmountChanged(CurrentMagAmount);
+  }
+}
+
+bool AWeapon::IsAmmo() const
+{
+  return CurrentMagAmount > 0;
+}
+
+const FWeaponRecoilParams & AWeapon::GetRecoil() const
+{
+  return *RecoilParams;
+}
+
+bool AWeapon::CanBeShoot() const
+{
+  return IsAmmo() && !IsReloading();
+}
+
+void AWeapon::ApplyFireModeAmmoLimit()
+{
+  static const TMap<EWeaponFireMode, uint32> AmmoToShoot{
+      {EWeaponFireMode::Single,    1u},
+      {EWeaponFireMode::Burst,     3u},
+      {EWeaponFireMode::Automatic, MAX_uint32},
+    };
+
+  LimitAmmoToShoot = AmmoToShoot[FireMode];
+}
+
+void AWeapon::ResetFireModeAmmoLimit()
+{
+  ApplyFireModeAmmoLimit();
+}
+
+void AWeapon::Fire()
+{
+  ensure(HasAuthority());
+
   if (!IsAmmo())
   {
     OnNoAmmoLeft();
@@ -75,17 +207,20 @@ void AWeapon::Shoot()
     return;
   }
 
-  if (m_AmountAmmoToShoot.has_value() && --m_AmountAmmoToShoot.value() == 0)
+  if (--LimitAmmoToShoot == 0)
     StopShooting();
 
-  --CurrentMagazineAmount;
+  --CurrentMagAmount;
+  Client_MagAmountChanged(CurrentMagAmount);
   ShootProjectile();
-  OnWeaponShoot.Broadcast(GetRecoil());
-  OnWeaponAmmoChanged.Broadcast(CurrentMagazineAmount);
+  Multicast_PlayShootAnimation();
+  Client_WeaponShoot(GetRecoil());
 }
 
 void AWeapon::ShootProjectile()
 {
+  ensure(HasAuthority());
+
   auto Hero = GetOwner<AHeroBase>();
 
   ABulletProjectile * Projectile;
@@ -115,160 +250,110 @@ void AWeapon::ShootProjectile()
   Projectile = GetWorld()->SpawnActor<ABulletProjectile>(ProjectileClass, ProjectileTransform, SpawnParams);
   if (Projectile)
     Projectile->SetDirection(Direction);
-
-  SpawnShootProjectile();
-}
-
-void AWeapon::OnNoAmmoLeft()
-{
-  PlaySound(EWeaponSound::NoAmmo);
-}
-
-void AWeapon::InitFromTable()
-{
-  FWeaponData * Data = WeaponDataHandle.GetRow<FWeaponData>("No data");
-  verify(Data);
-
-  Sounds         = &Data->SoundsSet;
-  HitboxDamage   = &Data->HitboxDamage;
-  RecoilParams   = &Data->RecoilParams;
-  FireModes      = &Data->FireModes;
-  FireRate       = Data->FireRate;
-  MagazineAmount = Data->MagazineAmount;
-}
-
-void AWeapon::Reload()
-{
-  StopShooting();
-  bIsReloading = true;
-}
-
-bool AWeapon::IsReloading() const
-{
-  return bIsReloading;
-}
-
-bool AWeapon::IsMagazineExtracted() const
-{
-  return CurrentMagazineAmount == INVALID_AMMO_AMOUNT;
 }
 
 void AWeapon::PlaySound(EWeaponSound SoundType)
 {
-  USoundBase * Sound = GetSound(SoundType);
-  if (!Sound)
+  if (!HasAuthority())
   {
-    UE_LOG(LogCore, Warning, TEXT("No sounds set for %s"), *GetDisplayName().ToString());
-    return;
+    USoundBase * Sound = GetSound(SoundType);
+    if (!Sound)
+    {
+      UE_LOG(LogCore, Warning, TEXT("No sounds set for %s"), *GetDisplayName().ToString());
+      return;
+    }
+
+    UGameplayStatics::PlaySoundAtLocation(GetWorld(), Sound, GetActorLocation());
   }
-
-  UGameplayStatics::PlaySoundAtLocation(GetWorld(), Sound, GetActorLocation());
-}
-
-USoundBase * AWeapon::GetSound(EWeaponSound SoundType) const
-{
-  FSoundsSet * SoundsSet = Sounds->Find(SoundType);
-  if (!SoundsSet || SoundsSet->Sounds.IsEmpty())
-    return nullptr;
-
-  return SoundsSet->Sounds[FMath::RandRange(0, SoundsSet->Sounds.Num() - 1)].Get();
-}
-
-void AWeapon::SwitchFireMode()
-{
-  const auto PrevMode = FireMode;
-
-  const int Index = FireModes->Find(FireMode);
-  FireMode = (*FireModes)[(Index + 1) % FireModes->Num()];
-
-  if (FireMode != PrevMode)
+  else
   {
-    PlaySound(EWeaponSound::FireModeSwitch);
-    OnFireModeChanged.Broadcast(FireMode);
+    Client_PlaySound(SoundType);
   }
 }
 
-int32 AWeapon::GetDamage(const TSoftObjectPtr<class UPhysicalMaterial> & MaterialHit) const
+//
+// Replication
+//
+
+void AWeapon::GetLifetimeReplicatedProps(TArray<FLifetimeProperty> & OutLifetimeProps) const
 {
-  const int32 * Damage = HitboxDamage->Find(MaterialHit);
-  if (!Damage)
+  Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+  DOREPLIFETIME_CONDITION(AWeapon, bIsShooting,      COND_None);
+  DOREPLIFETIME_CONDITION(AWeapon, bIsReloading,     COND_None);
+  DOREPLIFETIME_CONDITION(AWeapon, FireMode,         COND_None);
+  DOREPLIFETIME_CONDITION(AWeapon, CurrentMagAmount, COND_None);
+  DOREPLIFETIME_CONDITION(AWeapon, LimitAmmoToShoot, COND_OwnerOnly);
+}
+
+void AWeapon::Client_PlaySound_Implementation(EWeaponSound SoundType)
+{
+  PlaySound(SoundType);
+}
+
+void AWeapon::Server_Reload_Implementation()
+{
+  StopShooting();
+  bIsReloading = true;
+  Multicast_PlayReloadAnimation();
+}
+
+void AWeapon::Multicast_PlayReloadAnimation_Implementation()
+{
+  PlayReloadAnimation();
+}
+
+void AWeapon::Multicast_PlayShootAnimation_Implementation()
+{
+  PlayShootAnimation();
+}
+
+void AWeapon::Server_StartShooting_Implementation()
+{
+  bIsShooting = true;
+  ApplyFireModeAmmoLimit();
+
+  GetWorldTimerManager().SetTimer(m_ShootingTimer, this, &AWeapon::Fire, FireRate, true, 0.0f);
+}
+
+bool AWeapon::Server_StartShooting_Validate()
+{
+  return IsAmmo();
+}
+
+void AWeapon::Server_StopShooting_Implementation()
+{
+  bIsShooting = false;
+  GetWorldTimerManager().ClearTimer(m_ShootingTimer);
+  ResetFireModeAmmoLimit();
+}
+
+void AWeapon::Client_WeaponShoot_Implementation(const FWeaponRecoilParams & Recoil)
+{
+  OnWeaponShoot.Broadcast(Recoil);
+}
+
+void AWeapon::Server_SwitchFireMode_Implementation()
+{
+  const int32 Index = FireModes->Find(FireMode);
+
+  const EWeaponFireMode PrevMode = FireMode;
+  const EWeaponFireMode NextMode = (*FireModes)[(Index + 1) % FireModes->Num()];
+
+  if (NextMode != PrevMode)
   {
-    UE_LOG(LogCore, Warning, TEXT("No damage set for %s"), *MaterialHit->GetName());
-    return 0;
+    FireMode = NextMode;
+    Client_FireModeChanged(FireMode);
   }
-
-  return *Damage + FMath::RandRange(-*Damage / 10, *Damage / 10);
 }
 
-void AWeapon::OnMagazineExtracted()
+void AWeapon::Client_FireModeChanged_Implementation(EWeaponFireMode Mode)
 {
-  CurrentMagazineAmount = INVALID_AMMO_AMOUNT;
-  OnWeaponAmmoChanged.Broadcast(CurrentMagazineAmount);
-
-  verify(m_MagazineActor);
-  UStaticMeshComponent * MagazineMesh = m_MagazineActor->GetStaticMeshComponent();
-
-  const FDetachmentTransformRules DetachmentRules(EDetachmentRule::KeepWorld, true);
-  MagazineMesh->DetachFromComponent(DetachmentRules);
-  MagazineMesh->SetSimulatePhysics(true);
-
-  m_MagazineActor->SetLifeSpan(30);
-  m_MagazineActor = nullptr;
-
-  PlaySound(EWeaponSound::Reload_1);
+  PlaySound(EWeaponSound::FireModeSwitch);
+  OnFireModeChanged.Broadcast(Mode);
 }
 
-void AWeapon::OnMagazineTaken()
+void AWeapon::Client_MagAmountChanged_Implementation(int32 MagAmount)
 {
-  auto HeroMesh = GetOwner<ACharacter>()->GetMesh();
-
-  const FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, true);
-
-  m_MagazineActor = GetWorld()->SpawnActor<AStaticMeshActor>(MagazineClass);
-  m_MagazineActor->AttachToComponent(HeroMesh, AttachmentRules, TEXT("magazine_socket"));
-
-  PlaySound(EWeaponSound::Reload_2);
-}
-
-void AWeapon::OnMagazineInserted()
-{
-  const FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, true);
-  m_MagazineActor->AttachToComponent(ModelMesh, AttachmentRules, TEXT("Magazine"));
-
-  CurrentMagazineAmount = MagazineAmount;
-  OnWeaponAmmoChanged.Broadcast(CurrentMagazineAmount);
-  bIsReloading = false;
-
-  PlaySound(EWeaponSound::Reload_3);
-}
-
-bool AWeapon::IsAmmo() const
-{
-  return CurrentMagazineAmount > 0;
-}
-
-FWeaponRecoilParams AWeapon::GetRecoil() const
-{
-  return *RecoilParams;
-}
-
-bool AWeapon::CanBeShoot() const
-{
-  return IsAmmo() && !IsReloading();
-}
-
-void AWeapon::ApplyFireModeAmmoLimit()
-{
-  static const TMap<EWeaponFireMode, uint32> AmmoToShoot{
-      {EWeaponFireMode::Single,    1u},
-      {EWeaponFireMode::Burst,     3u},
-      {EWeaponFireMode::Automatic, MAX_uint32},
-    };
-
-  m_AmountAmmoToShoot = AmmoToShoot[FireMode];
-}
-
-void AWeapon::ResetFireModeAmmoLimit()
-{
-  m_AmountAmmoToShoot.reset();
+  OnWeaponAmmoChanged.Broadcast(MagAmount);
 }

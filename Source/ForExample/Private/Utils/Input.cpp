@@ -5,8 +5,10 @@
 
 FText UInput::GetKeyBindedToAction(APlayerController * Controller, UInputAction * Action)
 {
-  UEnhancedInputLocalPlayerSubsystem * Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(Controller->GetLocalPlayer());
-  const TArray<FKey> Binds = Subsystem->QueryKeysMappedToAction(Action);
+  ensure(Controller->IsLocalController());
 
+  auto InputSubsystem = Controller->GetLocalPlayer()->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>();
+
+  const TArray<FKey> Binds = InputSubsystem->QueryKeysMappedToAction(Action);
   return Binds.IsEmpty() ? FText() : Binds[0].GetDisplayName();
 }

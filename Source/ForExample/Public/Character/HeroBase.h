@@ -11,6 +11,7 @@ class AInteractableActor;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWeaponPickedUpSignature, AWeapon*, Weapon);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWeaponDroppedSignature, AWeapon*, Weapon);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FHealthChangedSignature, int32, Health, int32, MaxHealth);
 
 UCLASS()
 class FOREXAMPLE_API AHeroBase : public ACharacter
@@ -32,7 +33,7 @@ public:
   UFUNCTION(BlueprintPure, Category=Weapon)
   bool IsWeaponReloading() const;
 
-  void OnNoHealthLeft();
+  void OnHealthPointsChanged();
 
 protected:
 
@@ -46,12 +47,14 @@ protected:
 
   float TakeDamage(float DamageAmount, struct FDamageEvent const & DamageEvent, class AController * EventInstigator, AActor * DamageCauser) override;
 
+  void OnPlayerStateChanged(APlayerState * NewPlayerState, APlayerState * OldPlayerState) override;
+
   bool CanJumpInternal_Implementation() const override;
 
   bool CanCrouch() const override;
 
   UFUNCTION(BlueprintCallable)
-  void InputActionUse();
+  void InputActionInteract();
 
   UFUNCTION(BlueprintCallable)
   void InputActionDrop();
@@ -92,24 +95,13 @@ protected:
   UFUNCTION(BlueprintCallable)
   void InputActionSwitchFireMode();
 
-  UFUNCTION(BlueprintCallable, Category=Weapon)
-  void DropWeapon();
-
-  UPROPERTY(BlueprintAssignable, Category=Weapon)
-  FWeaponPickedUpSignature OnWeaponPickedUp;
-
-  UPROPERTY(BlueprintAssignable, Category=Weapon)
-  FWeaponDroppedSignature OnWeaponDropped;
-
-  void SetWalkingSpeed(float WalkSpeed);
-
   UFUNCTION(BlueprintPure)
   bool IsRunning() const;
 
   UFUNCTION(BlueprintCallable)
   void OnWeaponShoot(FWeaponRecoilParams RecoilParams);
 
-  UFUNCTION(BlueprintImplementableEvent, Category=Weapon)
+  UFUNCTION(BlueprintImplementableEvent, BlueprintCallable, Category=Weapon)
   void PlayWeaponReloadAnimation();
 
   UFUNCTION(BlueprintImplementableEvent, Category=Weapon)
@@ -120,10 +112,62 @@ protected:
 
   AInteractableActor * GetClosestInteractable() const;
 
-  UFUNCTION(BlueprintCallable)
   void TryCreateHint();
 
   void TryDestroyHint();
+
+//
+// Replication
+//
+
+  void GetLifetimeReplicatedProps(TArray<FLifetimeProperty> & OutLifetimeProps) const override;
+
+  UFUNCTION(NetMulticast, Reliable)
+  void SetWalkingSpeed(float Speed);
+
+  UFUNCTION(NetMulticast, Reliable)
+  void SetRunning(bool bIsRunning);
+
+  UFUNCTION()
+  void OnRep_WeaponChanged(AWeapon * PrevWeapon);
+
+  UFUNCTION(Server, Reliable, WithValidation)
+  void Server_PickupInteractable(AInteractableActor * Interactable);
+
+  UFUNCTION(Server, Reliable, WithValidation)
+  void Server_DropInteractable();
+
+  UFUNCTION()
+  void OnRep_AimChanged();
+
+  UFUNCTION(Server, Reliable)
+  void Server_Aim();
+
+  UFUNCTION(Server, Reliable)
+  void Server_FinishAim();
+
+  UFUNCTION(Server, Reliable)
+  void Server_Run();
+
+  UFUNCTION(Server, Reliable)
+  void Server_FinishRun();
+
+  UFUNCTION(Server, Reliable)
+  void Server_Walk();
+
+  UFUNCTION(Server, Reliable)
+  void Server_FinishWalk();
+
+public:
+
+  UPROPERTY(BlueprintAssignable)
+  FHealthChangedSignature OnHealthChanged;
+
+  UPROPERTY(BlueprintAssignable, Category=Weapon)
+  FWeaponPickedUpSignature OnWeaponPickedUp;
+
+  UPROPERTY(BlueprintAssignable, Category=Weapon)
+  FWeaponDroppedSignature OnWeaponDropped;
 
 protected:
 
@@ -145,13 +189,13 @@ protected:
   UPROPERTY(EditDefaultsOnly, Category=Projectile)
   TSubclassOf<class AHint> HintClass;
 
-  UPROPERTY(BlueprintReadOnly, Category=Weapon)
-  AWeapon * Weapon = nullptr;
-
-  UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category=Weapon)
+  UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = Weapon)
   bool bApplyControllerRotationYawWithWeapon = false;
 
-  UPROPERTY(BlueprintReadOnly)
+  UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_WeaponChanged, Category=Weapon)
+  AWeapon * Weapon = nullptr;
+
+  UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_AimChanged)
   bool bIsAiming = false;
 
 protected:

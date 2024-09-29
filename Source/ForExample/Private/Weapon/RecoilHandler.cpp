@@ -10,6 +10,7 @@ URecoilHandler::URecoilHandler() :
   m_CurrentRotation(FRotator::ZeroRotator)
 {
   PrimaryComponentTick.bCanEverTick = true;
+  SetIsReplicatedByDefault(false);
 }
 
 void URecoilHandler::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction * ThisTickFunction)

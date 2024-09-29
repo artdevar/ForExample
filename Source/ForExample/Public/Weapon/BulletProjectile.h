@@ -31,6 +31,12 @@ protected:
   UFUNCTION(BlueprintImplementableEvent)
   void OnCharacterHit(const FHitResult & Hit);
 
+  UFUNCTION(NetMulticast, Unreliable)
+  void Multicast_OnObstacleHit(const FHitResult & Hit);
+
+  UFUNCTION(NetMulticast, Unreliable)
+  void Multicast_OnCharacterHit(const FHitResult & Hit);
+
 protected:
 
   UPROPERTY(VisibleDefaultsOnly, Category=Projectile)

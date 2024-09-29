@@ -19,33 +19,31 @@ class FOREXAMPLE_API AWeapon : public AInteractableActor
 {
   GENERATED_BODY()
 
-public:
+protected:
 
   AWeapon();
 
   void BeginPlay() override;
 
+public:
+
   void OnDropped() override;
+
+  bool IsDroppable() const override;
 
 public:
 
-  UFUNCTION(BlueprintCallable)
-  virtual void StartShooting();
+  void StartShooting();
 
-  UFUNCTION(BlueprintCallable)
-  virtual void StopShooting();
+  void StopShooting();
 
-  UFUNCTION(BlueprintCallable)
-  virtual void Reload();
+  void Reload();
 
   UFUNCTION(BlueprintPure)
   bool IsReloading() const;
 
   UFUNCTION(BlueprintPure)
   bool IsMagazineExtracted() const;
-
-  UFUNCTION(BlueprintCallable)
-  void PlaySound(EWeaponSound SoundType);
 
   USoundBase * GetSound(EWeaponSound SoundType) const;
 
@@ -67,28 +65,71 @@ public: // Animation events
 
 protected:
 
-  UFUNCTION(BlueprintImplementableEvent)
-  void SpawnShootProjectile();
-
-  void ShootProjectile();
-
-  void Shoot();
-
   bool IsAmmo() const;
 
   void OnNoAmmoLeft();
 
   virtual void InitFromTable();
 
-private:
-
-  FWeaponRecoilParams GetRecoil() const;
+  const FWeaponRecoilParams & GetRecoil() const;
 
   bool CanBeShoot() const;
 
   void ApplyFireModeAmmoLimit();
 
   void ResetFireModeAmmoLimit();
+
+  UFUNCTION(BlueprintImplementableEvent)
+  void SpawnShootProjectile();
+
+  void Fire();
+
+  void ShootProjectile();
+
+  UFUNCTION(BlueprintCallable)
+  void PlaySound(EWeaponSound SoundType);
+
+  UFUNCTION(BlueprintImplementableEvent)
+  void PlayReloadAnimation();
+
+  UFUNCTION(BlueprintImplementableEvent)
+  void PlayShootAnimation();
+
+//
+// Replication
+//
+
+  void GetLifetimeReplicatedProps(TArray<FLifetimeProperty> & OutLifetimeProps) const override;
+
+  UFUNCTION(Client, Unreliable)
+  void Client_PlaySound(EWeaponSound SoundType);
+
+  UFUNCTION(Server, Reliable)
+  void Server_Reload();
+
+  UFUNCTION(NetMulticast, Reliable)
+  void Multicast_PlayReloadAnimation();
+
+  UFUNCTION(NetMulticast, Unreliable)
+  void Multicast_PlayShootAnimation();
+
+  UFUNCTION(Server, Reliable, WithValidation)
+  void Server_StartShooting();
+
+  UFUNCTION(Server, Reliable)
+  void Server_StopShooting();
+
+  UFUNCTION(Client, Reliable)
+  void Client_WeaponShoot(const FWeaponRecoilParams & Recoil);
+
+  UFUNCTION(Server, Reliable)
+  void Server_SwitchFireMode();
+
+  UFUNCTION(Client, Unreliable)
+  void Client_FireModeChanged(EWeaponFireMode Mode);
+
+  UFUNCTION(Client, Unreliable)
+  void Client_MagAmountChanged(int32 MagAmount);
 
 public:
 
@@ -106,20 +147,26 @@ protected:
   UPROPERTY(EditDefaultsOnly, meta=(RowType=WeaponData), Category=Data)
   FDataTableRowHandle WeaponDataHandle;
 
-  UPROPERTY(EditDefaultsOnly, Category = Projectile)
+  UPROPERTY(EditDefaultsOnly, Category=Projectile)
   TSubclassOf<class ABulletProjectile> ProjectileClass;
 
-  UPROPERTY(EditDefaultsOnly, Category=Magazine)
-  TSubclassOf<class AStaticMeshActor> MagazineClass;
-
-  UPROPERTY(BlueprintReadOnly, Category = Magazine)
-  int32 CurrentMagazineAmount = 0;
+  UPROPERTY(BlueprintReadOnly, Replicated, Category=Magazine)
+  int32 CurrentMagAmount = 0;
 
   UPROPERTY(BlueprintReadWrite)
   UMeshComponent * ModelMesh = nullptr;
 
-  UPROPERTY(BlueprintReadOnly)
+  UPROPERTY(BlueprintReadOnly, Replicated)
   EWeaponFireMode FireMode = EWeaponFireMode::Single;
+
+  UPROPERTY(Replicated)
+  bool bIsShooting = false;
+
+  UPROPERTY(Replicated)
+  bool bIsReloading = false;
+
+  UPROPERTY(Replicated)
+  uint32 LimitAmmoToShoot = 0u;
 
 protected: // Data table
 
@@ -134,12 +181,6 @@ protected:
 
   static const int32 INVALID_AMMO_AMOUNT;
 
-  AStaticMeshActor * m_MagazineActor = nullptr;
-  FTimerHandle       m_ShootingTimer;
-
-  bool bIsShooting  = false;
-  bool bIsReloading = false;
-
-  std::optional<uint32> m_AmountAmmoToShoot;
+  FTimerHandle m_ShootingTimer;
 
 };

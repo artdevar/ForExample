@@ -8,11 +8,12 @@
 #include "Weapon/RecoilHandler.h"
 #include "Math/UnrealMathUtility.h"
 #include "Kismet/GameplayStatics.h"
+#include "Net/UnrealNetwork.h"
 
 AHeroBase::AHeroBase()
 {
   PrimaryActorTick.bCanEverTick = true;
-  bLookForInteractables = true;
+  bReplicates = true;
 }
 
 void AHeroBase::Tick(float DeltaSeconds)
@@ -27,7 +28,6 @@ void AHeroBase::Reset()
 {
   bLookForInteractables = false;
   TryDestroyHint();
-  DropWeapon();
 
   Super::Reset();
 }
@@ -37,6 +37,10 @@ void AHeroBase::BeginPlay()
   Super::BeginPlay();
 
   InitInput();
+
+  GetComponentByClass<URecoilHandler>()->Deactivate();
+
+  bLookForInteractables = IsLocallyControlled();
 }
 
 void AHeroBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -44,130 +48,106 @@ void AHeroBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
   Super::EndPlay(EndPlayReason);
 }
 
-void AHeroBase::InputActionUse()
+void AHeroBase::InputActionInteract()
 {
   AInteractableActor * NearestInteractable = HintToInteractable ? HintToInteractable->Interactable : nullptr;
-  if (NearestInteractable == nullptr)
-    return;
-
-  switch (NearestInteractable->GetType())
-  {
-    case EInteractableType::Weapon:
-    {
-      if (HasWeapon())
-        DropWeapon();
-
-      Weapon = Cast<AWeapon>(NearestInteractable);
-      Weapon->GetComponentByClass<USphereComponent>()->SetSimulatePhysics(false);
-      Weapon->SetOwner(this);
-      Weapon->OnPickedUp();
-      Weapon->OnWeaponShoot.AddDynamic(this, &AHeroBase::OnWeaponShoot);
-
-      GetComponentByClass<URecoilHandler>()->Activate(true);
-
-      const FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepWorld, true);
-      Weapon->AttachToComponent(GetMesh(), AttachmentRules, TEXT("weapon_socket"));
-
-      OnWeaponPickedUp.Broadcast(Weapon);
-
-      bUseControllerRotationYaw = bApplyControllerRotationYawWithWeapon;
-
-      break;
-    }
-
-    default:
-      break;
-  }
-
-  TryCreateHint();
+  if (NearestInteractable != nullptr)
+    Server_PickupInteractable(NearestInteractable);
 }
 
 void AHeroBase::InputActionDrop()
 {
-  if (HasWeapon() && Weapon->IsDroppable())
-    DropWeapon();
+  if (IsLocallyControlled())
+  {
+    if (HasWeapon() && Weapon->IsDroppable())
+      Server_DropInteractable();
+  }
 }
 
 void AHeroBase::InputActionAim()
 {
-  bIsAiming = true;
-  bUseControllerRotationYaw = HasWeapon();
-  SetWalkingSpeed(SlowWalkSpeed);
+  if (IsLocallyControlled())
+    Server_Aim();
 }
 
 void AHeroBase::InputActionFinishedAim()
 {
-  bIsAiming = false;
-  bUseControllerRotationYaw = HasWeapon() && bApplyControllerRotationYawWithWeapon;
-  SetWalkingSpeed(WalkSpeed);
+  if (IsLocallyControlled())
+    Server_FinishAim();
 }
 
 void AHeroBase::InputActionAttack()
 {
-  if (HasWeapon())
-    Weapon->StartShooting();
+  if (IsLocallyControlled())
+  {
+    if (HasWeapon())
+      Weapon->StartShooting();
+  }
 }
 
 void AHeroBase::InputActionFinishedAttack()
 {
-  if (HasWeapon())
-    Weapon->StopShooting();
+  if (IsLocallyControlled())
+  {
+    if (HasWeapon())
+      Weapon->StopShooting();
+  }
 }
 
 void AHeroBase::InputActionRun()
 {
-  if (IsWeaponAiming() || IsWeaponReloading() || bIsCrouched)
-    return;
-
-  bUseControllerRotationYaw = false;
-  SetWalkingSpeed(RunSpeed);
+  if (IsLocallyControlled())
+    Server_Run();
 }
 
 void AHeroBase::InputActionFinishedRun()
 {
-  if (IsWeaponAiming() || IsWeaponReloading() || bIsCrouched)
-    return;
-
-  bUseControllerRotationYaw = HasWeapon() && bApplyControllerRotationYawWithWeapon;
-  SetWalkingSpeed(WalkSpeed);
+  if (IsLocallyControlled())
+    Server_FinishRun();
 }
 
 void AHeroBase::InputActionCrouch()
 {
-  Crouch();
+  if (IsLocallyControlled())
+    Crouch();
 }
 
 void AHeroBase::InputActionFinishedCrouch()
 {
-  UnCrouch();
+  if (IsLocallyControlled())
+    UnCrouch();
 }
 
 void AHeroBase::InputActionWalk()
 {
-  if (IsWeaponAiming() || bIsCrouched)
-    return;
-
-  SetWalkingSpeed(SlowWalkSpeed);
+  if (IsLocallyControlled())
+    Server_Walk();
 }
 
 void AHeroBase::InputActionFinishedWalk()
 {
-  SetWalkingSpeed(WalkSpeed);
+  if (IsLocallyControlled())
+    Server_FinishWalk();
 }
 
 void AHeroBase::InputActionReload()
 {
-  if (!HasWeapon() || IsWeaponReloading() || IsRunning())
-    return;
+  if (IsLocallyControlled())
+  {
+    if (IsRunning() || !HasWeapon() || IsWeaponReloading())
+      return;
 
-  Weapon->Reload();
-  PlayWeaponReloadAnimation();
+    Weapon->Reload();
+  }
 }
 
 void AHeroBase::InputActionSwitchFireMode()
 {
-  if (HasWeapon())
-    Weapon->SwitchFireMode();
+  if (IsLocallyControlled())
+  {
+    if (HasWeapon())
+      Weapon->SwitchFireMode();
+  }
 }
 
 float AHeroBase::TakeDamage(float DamageAmount, struct FDamageEvent const & DamageEvent, class AController * EventInstigator, AActor * DamageCauser)
@@ -177,43 +157,21 @@ float AHeroBase::TakeDamage(float DamageAmount, struct FDamageEvent const & Dama
   return DamageApplied;
 }
 
-void AHeroBase::AddControlRotation(const FRotator & NewRotation)
+void AHeroBase::OnPlayerStateChanged(APlayerState * NewPlayerState, APlayerState * OldPlayerState)
 {
-  GetController()->SetControlRotation(GetControlRotation() + NewRotation);
+  Super::OnPlayerStateChanged(NewPlayerState, OldPlayerState);
+
+  if (HasAuthority() || !NewPlayerState)
+    return;
+
+  auto HeroState = Cast<AHeroState>(NewPlayerState);
+  OnHealthChanged.Broadcast(HeroState->Health, HeroState->MaxHealth);
 }
 
-void AHeroBase::DropWeapon()
+void AHeroBase::AddControlRotation(const FRotator & NewRotation)
 {
-  if (Weapon->IsReloading())
-    StopAnimMontage();
-
-  Weapon->StopShooting();
-
-  const FDetachmentTransformRules DetachmentRules(EDetachmentRule::KeepWorld, false);
-  Weapon->DetachFromActor(DetachmentRules);
-
-  auto WeaponRootComponent = Cast<UPrimitiveComponent>(Weapon->GetRootComponent());
-  WeaponRootComponent->SetSimulatePhysics(true);
-  WeaponRootComponent->AddImpulse(GetActorForwardVector() * DropImpulse, NAME_None, true);
-
-  Weapon->OnWeaponShoot.RemoveDynamic(this, &AHeroBase::OnWeaponShoot);
-  Weapon->OnDropped();
-  Weapon->SetPickupable(false);
-  Weapon->SetOwner(nullptr);
-
-  OnWeaponDropped.Broadcast(Weapon);
-
-  FTimerHandle Timer;
-  GetWorld()->GetTimerManager().SetTimer(Timer, [WeaponPtr = Weapon]()
-  {
-    if (::IsValid(WeaponPtr))
-      WeaponPtr->SetPickupable(true);
-  }, 1.0f, false);
-
-  GetComponentByClass<URecoilHandler>()->Deactivate();
-
-  Weapon = nullptr;
-  bUseControllerRotationYaw = false;
+  if (IsLocallyControlled())
+    GetController()->SetControlRotation(GetControlRotation() + NewRotation);
 }
 
 bool AHeroBase::HasWeapon() const
@@ -231,9 +189,10 @@ bool AHeroBase::IsWeaponReloading() const
   return HasWeapon() && Weapon->IsReloading();
 }
 
-void AHeroBase::OnNoHealthLeft()
+void AHeroBase::OnHealthPointsChanged()
 {
-
+  auto HeroState = GetPlayerState<AHeroState>();
+  OnHealthChanged.Broadcast(HeroState->Health, HeroState->MaxHealth);
 }
 
 bool AHeroBase::CanJumpInternal_Implementation() const
@@ -245,11 +204,6 @@ bool AHeroBase::CanCrouch() const
 {
   // No animations for crouching without a weapon
   return Super::CanCrouch() && HasWeapon();
-}
-
-void AHeroBase::SetWalkingSpeed(float Speed)
-{
-  GetCharacterMovement()->MaxWalkSpeed = Speed;
 }
 
 bool AHeroBase::IsRunning() const
@@ -336,4 +290,190 @@ void AHeroBase::TryDestroyHint()
     HintToInteractable->Destroy();
     HintToInteractable = nullptr;
   }
+}
+
+//
+// Replication
+//
+
+void AHeroBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty> & OutLifetimeProps) const
+{
+  Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+  DOREPLIFETIME(AHeroBase, Weapon);
+  DOREPLIFETIME(AHeroBase, bIsAiming);
+}
+
+void AHeroBase::SetWalkingSpeed_Implementation(float Speed)
+{
+  GetCharacterMovement()->MaxWalkSpeed = Speed;
+}
+
+void AHeroBase::SetRunning_Implementation(bool bIsRunning)
+{
+  if (bIsRunning)
+  {
+    bUseControllerRotationYaw = false;
+    GetCharacterMovement()->bOrientRotationToMovement = !bUseControllerRotationYaw;
+    SetWalkingSpeed(RunSpeed);
+  }
+  else
+  {
+    bUseControllerRotationYaw = HasWeapon() && bApplyControllerRotationYawWithWeapon;
+    GetCharacterMovement()->bOrientRotationToMovement = !bUseControllerRotationYaw;
+    SetWalkingSpeed(WalkSpeed);
+  }
+}
+
+void AHeroBase::OnRep_WeaponChanged(AWeapon * PrevWeapon)
+{
+  const bool WeaponChanged = PrevWeapon != nullptr;
+  const bool WeaponDropped = Weapon     == nullptr;
+
+  if (WeaponChanged)
+  {
+    if (PrevWeapon->IsReloading())
+      StopAnimMontage();
+
+    PrevWeapon->StopShooting();
+
+    const FDetachmentTransformRules DetachmentRules(EDetachmentRule::KeepWorld, false);
+    PrevWeapon->DetachFromActor(DetachmentRules);
+
+    auto WeaponRootComponent = Cast<UPrimitiveComponent>(PrevWeapon->GetRootComponent());
+    WeaponRootComponent->SetSimulatePhysics(true);
+    WeaponRootComponent->AddImpulse(GetActorForwardVector() * DropImpulse, NAME_None, true);
+
+    PrevWeapon->OnWeaponShoot.RemoveDynamic(this, &AHeroBase::OnWeaponShoot);
+    PrevWeapon->OnDropped();
+    PrevWeapon->SetPickupable(false);
+    PrevWeapon->SetOwner(nullptr);
+
+    OnWeaponDropped.Broadcast(PrevWeapon);
+
+    FTimerHandle Timer;
+    GetWorld()->GetTimerManager().SetTimer(Timer, [WeaponPtr = PrevWeapon]()
+    {
+      if (::IsValid(WeaponPtr))
+        WeaponPtr->SetPickupable(true);
+    }, 1.0f, false);
+
+    GetComponentByClass<URecoilHandler>()->Deactivate();
+    bUseControllerRotationYaw = false;
+    GetCharacterMovement()->bOrientRotationToMovement = !bUseControllerRotationYaw;
+  }
+
+  if (!WeaponDropped)
+  {
+    Cast<UPrimitiveComponent>(Weapon->GetRootComponent())->SetSimulatePhysics(false);
+    Weapon->SetOwner(this);
+    Weapon->OnPickedUp();
+    Weapon->OnWeaponShoot.AddDynamic(this, &AHeroBase::OnWeaponShoot);
+
+    GetComponentByClass<URecoilHandler>()->Activate(true);
+
+    const FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepWorld, true);
+    Weapon->AttachToComponent(GetMesh(), AttachmentRules, TEXT("weapon_socket"));
+
+    OnWeaponPickedUp.Broadcast(Weapon);
+    bUseControllerRotationYaw = bApplyControllerRotationYawWithWeapon;
+    GetCharacterMovement()->bOrientRotationToMovement = !bUseControllerRotationYaw;
+  }
+}
+
+void AHeroBase::Server_PickupInteractable_Implementation(AInteractableActor * Interactable)
+{
+  switch (Interactable->GetType())
+  {
+    case EInteractableType::Weapon:
+    {
+      auto PrevWeapon = Weapon;
+      Weapon = Cast<AWeapon>(Interactable);
+      OnRep_WeaponChanged(PrevWeapon);
+      break;
+    }
+  }
+}
+
+bool AHeroBase::Server_PickupInteractable_Validate(AInteractableActor * Interactable)
+{
+  return GetClosestInteractable() == Interactable;
+}
+
+void AHeroBase::Server_DropInteractable_Implementation()
+{
+  auto PrevWeapon = Weapon;
+  Weapon = nullptr;
+  OnRep_WeaponChanged(PrevWeapon);
+}
+
+bool AHeroBase::Server_DropInteractable_Validate()
+{
+  return HasWeapon() && Weapon->IsDroppable();
+}
+
+void AHeroBase::OnRep_AimChanged()
+{
+  if (bIsAiming)
+  {
+    bUseControllerRotationYaw = HasWeapon();
+    GetCharacterMovement()->bOrientRotationToMovement = !bUseControllerRotationYaw;
+    SetWalkingSpeed(SlowWalkSpeed);
+  }
+  else
+  {
+    bUseControllerRotationYaw = HasWeapon() && bApplyControllerRotationYawWithWeapon;
+    GetCharacterMovement()->bOrientRotationToMovement = !bUseControllerRotationYaw;
+    SetWalkingSpeed(WalkSpeed);
+  }
+}
+
+void AHeroBase::Server_Aim_Implementation()
+{
+  if (!bIsAiming)
+  {
+    bIsAiming = true;
+    OnRep_AimChanged();
+  }
+}
+
+void AHeroBase::Server_FinishAim_Implementation()
+{
+  if (bIsAiming)
+  {
+    bIsAiming = false;
+    OnRep_AimChanged();
+  }
+}
+
+void AHeroBase::Server_Run_Implementation()
+{
+  if (IsWeaponAiming() || IsWeaponReloading() || bIsCrouched)
+    return;
+
+  SetRunning(true);
+}
+
+void AHeroBase::Server_FinishRun_Implementation()
+{
+  if (!IsRunning())
+    return;
+
+  SetRunning(false);
+}
+
+void AHeroBase::Server_Walk_Implementation()
+{
+  if (IsWeaponAiming() || bIsCrouched)
+    return;
+
+  SetWalkingSpeed(SlowWalkSpeed);
+}
+
+void AHeroBase::Server_FinishWalk_Implementation()
+{
+  if (IsWeaponAiming() || bIsCrouched)
+    return;
+
+  SetWalkingSpeed(WalkSpeed);
 }
