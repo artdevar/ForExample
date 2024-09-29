@@ -9,3 +9,4 @@
 3. [Improved recoil and crosshair. Fire modes and bullet impact have been added.](https://youtu.be/ofnIIUHvnrU?si=HtXYCq6wWBmdvWI2)
 4. [Improved the hint, animations, and hitboxes have been added.](https://youtu.be/tZFgYjlbgnA)
 5. [AI. Hit animations, weapon reload stages, sprint.](https://youtu.be/QlzrJy5D6k8)
+6. [Replication.](https://youtu.be/4EGRqMKgEF8)
