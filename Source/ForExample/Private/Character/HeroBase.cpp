@@ -8,6 +8,7 @@
 #include "Weapon/RecoilHandler.h"
 #include "Math/UnrealMathUtility.h"
 #include "Kismet/GameplayStatics.h"
+#include "Kismet/KismetMathLibrary.h"
 #include "Net/UnrealNetwork.h"
 
 AHeroBase::AHeroBase()
@@ -19,15 +20,15 @@ AHeroBase::AHeroBase()
 void AHeroBase::Tick(float DeltaSeconds)
 {
   Super::Tick(DeltaSeconds);
-
-  if (bLookForInteractables)
-    TryCreateHint();
 }
 
 void AHeroBase::Reset()
 {
-  bLookForInteractables = false;
-  TryDestroyHint();
+  if (GetWorldTimerManager().IsTimerActive(LookForInteractableTimer))
+  {
+    GetWorldTimerManager().ClearTimer(LookForInteractableTimer);
+    DestroyHint();
+  }
 
   Super::Reset();
 }
@@ -40,7 +41,11 @@ void AHeroBase::BeginPlay()
 
   GetComponentByClass<URecoilHandler>()->Deactivate();
 
-  bLookForInteractables = IsLocallyControlled();
+  if (IsLocallyControlled())
+  {
+    CreateHint();
+    GetWorldTimerManager().SetTimer(LookForInteractableTimer, this, &AHeroBase::UpdateHint, 0.05f, true);
+  }
 }
 
 void AHeroBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -50,9 +55,11 @@ void AHeroBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void AHeroBase::InputActionInteract()
 {
-  AInteractableActor * NearestInteractable = HintToInteractable ? HintToInteractable->Interactable : nullptr;
-  if (NearestInteractable != nullptr)
-    Server_PickupInteractable(NearestInteractable);
+  if (HintToInteractable->Interactable.IsValid())
+  {
+    Server_PickupInteractable(HintToInteractable->Interactable.Get());
+    UpdateHint();
+  }
 }
 
 void AHeroBase::InputActionDrop()
@@ -96,7 +103,7 @@ void AHeroBase::InputActionFinishedAttack()
 
 void AHeroBase::InputActionRun()
 {
-  if (IsLocallyControlled())
+  if (IsLocallyControlled() && !IsRunning())
     Server_Run();
 }
 
@@ -176,7 +183,7 @@ void AHeroBase::AddControlRotation(const FRotator & NewRotation)
 
 bool AHeroBase::HasWeapon() const
 {
-  return Weapon && Weapon->IsPickedUp();
+  return !Weapon.IsExplicitlyNull() && Weapon->IsPickedUp();
 }
 
 bool AHeroBase::IsWeaponAiming() const
@@ -211,11 +218,22 @@ bool AHeroBase::IsRunning() const
   return FMath::IsNearlyEqual(GetCharacterMovement()->MaxWalkSpeed, RunSpeed);
 }
 
+bool AHeroBase::IsWalking() const
+{
+  return FMath::IsNearlyEqual(GetCharacterMovement()->MaxWalkSpeed, WalkSpeed);
+}
+
 void AHeroBase::OnWeaponShoot(FWeaponRecoilParams RecoilParams)
 {
   auto RecoilHandler = GetComponentByClass<URecoilHandler>();
   RecoilHandler->Add(RecoilParams);
   PlayWeaponShootAnimation();
+}
+
+void AHeroBase::SetUseControllerRotationYaw(bool bUse)
+{
+  bUseControllerRotationYaw = bUse;
+  GetCharacterMovement()->bOrientRotationToMovement = !bUseControllerRotationYaw;
 }
 
 AInteractableActor * AHeroBase::GetClosestInteractable() const
@@ -255,35 +273,26 @@ AInteractableActor * AHeroBase::GetClosestInteractable() const
   return Interactable;
 }
 
-void AHeroBase::TryCreateHint()
+void AHeroBase::CreateHint()
 {
-  AInteractableActor * ClosestInteractable = GetClosestInteractable();
-
-  if (!ClosestInteractable)
-  {
-    TryDestroyHint();
-    return;
-  }
-
-  if (HintToInteractable)
-  {
-    HintToInteractable->Interactable = ClosestInteractable;
-    return;
-  }
+  ensure(HintToInteractable == nullptr);
 
   FActorSpawnParameters HintSpawnParams;
   HintSpawnParams.Owner = this;
   HintSpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-  HintToInteractable = GetWorld()->SpawnActor<AHint>(HintClass, ClosestInteractable->GetTransform(), HintSpawnParams);
-  HintToInteractable->HintAction                  = EHintAction::Pickup;
-  HintToInteractable->Interactable                = ClosestInteractable;
+  HintToInteractable = GetWorld()->SpawnActor<AHint>(HintClass, FTransform(), HintSpawnParams);
   HintToInteractable->IsAttachedToInteractable    = true;
-  HintToInteractable->NeedFacing                  = true;
   HintToInteractable->DistanceDiscoverableSquared = InteractableDiscoverDistance * InteractableDiscoverDistance;
 }
 
-void AHeroBase::TryDestroyHint()
+void AHeroBase::UpdateHint()
+{
+  AInteractableActor * ClosestInteractable = GetClosestInteractable();
+  HintToInteractable->ChangeInteractable(ClosestInteractable, ClosestInteractable ? EHintAction::Pickup : EHintAction::None);
+}
+
+void AHeroBase::DestroyHint()
 {
   if (HintToInteractable)
   {
@@ -313,22 +322,20 @@ void AHeroBase::SetRunning_Implementation(bool bIsRunning)
 {
   if (bIsRunning)
   {
-    bUseControllerRotationYaw = false;
-    GetCharacterMovement()->bOrientRotationToMovement = !bUseControllerRotationYaw;
+    SetUseControllerRotationYaw(false);
     SetWalkingSpeed(RunSpeed);
   }
   else
   {
-    bUseControllerRotationYaw = HasWeapon() && bApplyControllerRotationYawWithWeapon;
-    GetCharacterMovement()->bOrientRotationToMovement = !bUseControllerRotationYaw;
+    SetUseControllerRotationYaw(HasWeapon() && bApplyControllerRotationYawWithWeapon);
     SetWalkingSpeed(WalkSpeed);
   }
 }
 
-void AHeroBase::OnRep_WeaponChanged(AWeapon * PrevWeapon)
+void AHeroBase::OnRep_WeaponChanged(const TWeakObjectPtr<AWeapon> & PrevWeapon)
 {
-  const bool WeaponChanged = PrevWeapon != nullptr;
-  const bool WeaponDropped = Weapon     == nullptr;
+  const bool WeaponChanged = !PrevWeapon.IsExplicitlyNull();
+  const bool WeaponDropped = Weapon.IsExplicitlyNull();
 
   if (WeaponChanged)
   {
@@ -349,18 +356,17 @@ void AHeroBase::OnRep_WeaponChanged(AWeapon * PrevWeapon)
     PrevWeapon->SetPickupable(false);
     PrevWeapon->SetOwner(nullptr);
 
-    OnWeaponDropped.Broadcast(PrevWeapon);
+    OnWeaponDropped.Broadcast(PrevWeapon.Get());
 
     FTimerHandle Timer;
     GetWorld()->GetTimerManager().SetTimer(Timer, [WeaponPtr = PrevWeapon]()
     {
-      if (::IsValid(WeaponPtr))
+      if (WeaponPtr.IsValid())
         WeaponPtr->SetPickupable(true);
     }, 1.0f, false);
 
     GetComponentByClass<URecoilHandler>()->Deactivate();
-    bUseControllerRotationYaw = false;
-    GetCharacterMovement()->bOrientRotationToMovement = !bUseControllerRotationYaw;
+    SetUseControllerRotationYaw(false);
   }
 
   if (!WeaponDropped)
@@ -375,9 +381,8 @@ void AHeroBase::OnRep_WeaponChanged(AWeapon * PrevWeapon)
     const FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepWorld, true);
     Weapon->AttachToComponent(GetMesh(), AttachmentRules, TEXT("weapon_socket"));
 
-    OnWeaponPickedUp.Broadcast(Weapon);
-    bUseControllerRotationYaw = bApplyControllerRotationYawWithWeapon;
-    GetCharacterMovement()->bOrientRotationToMovement = !bUseControllerRotationYaw;
+    OnWeaponPickedUp.Broadcast(Weapon.Get());
+    SetUseControllerRotationYaw(bApplyControllerRotationYawWithWeapon);
   }
 }
 
@@ -389,7 +394,7 @@ void AHeroBase::Server_PickupInteractable_Implementation(AInteractableActor * In
     {
       auto PrevWeapon = Weapon;
       Weapon = Cast<AWeapon>(Interactable);
-      OnRep_WeaponChanged(PrevWeapon);
+      OnRep_WeaponChanged(PrevWeapon.Get());
       break;
     }
   }
@@ -416,14 +421,12 @@ void AHeroBase::OnRep_AimChanged()
 {
   if (bIsAiming)
   {
-    bUseControllerRotationYaw = HasWeapon();
-    GetCharacterMovement()->bOrientRotationToMovement = !bUseControllerRotationYaw;
+    SetUseControllerRotationYaw(HasWeapon());
     SetWalkingSpeed(SlowWalkSpeed);
   }
   else
   {
-    bUseControllerRotationYaw = HasWeapon() && bApplyControllerRotationYawWithWeapon;
-    GetCharacterMovement()->bOrientRotationToMovement = !bUseControllerRotationYaw;
+    SetUseControllerRotationYaw(HasWeapon() && bApplyControllerRotationYawWithWeapon);
     SetWalkingSpeed(WalkSpeed);
   }
 }
@@ -448,7 +451,9 @@ void AHeroBase::Server_FinishAim_Implementation()
 
 void AHeroBase::Server_Run_Implementation()
 {
-  if (IsWeaponAiming() || IsWeaponReloading() || bIsCrouched)
+  const bool IsMoving = !GetCharacterMovement()->GetCurrentAcceleration().IsNearlyZero();
+
+  if (!IsMoving || IsWeaponAiming() || IsWeaponReloading() || bIsCrouched)
     return;
 
   SetRunning(true);

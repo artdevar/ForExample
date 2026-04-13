@@ -15,17 +15,27 @@ void AHint::Tick(float DeltaSeconds)
 {
   Super::Tick(DeltaSeconds);
 
-  if (GetOwner())
-  {
-    UpdateText();
-    UpdateOpacity();
-  }
+  if (Interactable.IsExplicitlyNull())
+    return;
 
-  if (IsNeedFacingToOwner())
-    FaceToHero();
+  UpdateText();
+  UpdateOpacity();
+  FaceToHero();
 
   if (IsNeedAttachToInteractable())
     UpdatePosition(DeltaSeconds);
+}
+
+void AHint::ChangeInteractable(AInteractableActor * InteractableActor, EHintAction Action)
+{
+  if (!InteractableActor)
+    SetTextOpacity(0.0f);
+  else
+  if (Interactable.IsExplicitlyNull())
+    SetActorLocation(InteractableActor->GetActorLocation());
+
+  Interactable = InteractableActor;
+  HintAction   = Action;
 }
 
 void AHint::UpdateText()
@@ -66,12 +76,7 @@ void AHint::UpdateOpacity()
   SetTextOpacity(FMath::Clamp(NewOpacity, 0.0f, 1.0f));
 }
 
-bool AHint::IsNeedFacingToOwner() const
-{
-  return NeedFacing && GetOwner();
-}
-
 bool AHint::IsNeedAttachToInteractable() const
 {
-  return IsAttachedToInteractable && Interactable;
+  return IsAttachedToInteractable && Interactable.IsValid();
 }

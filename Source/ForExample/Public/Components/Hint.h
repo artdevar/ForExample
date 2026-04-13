@@ -40,6 +40,8 @@ public:
 
   void Tick(float DeltaSeconds) override;
 
+  void ChangeInteractable(AInteractableActor * InteractableActor, EHintAction Action);
+
 protected:
 
   UFUNCTION(BlueprintImplementableEvent)
@@ -55,8 +57,6 @@ protected:
   void UpdatePosition(float DeltaSeconds);
 
   void UpdateOpacity();
-
-  bool IsNeedFacingToOwner() const;
 
   bool IsNeedAttachToInteractable() const;
 
@@ -77,9 +77,8 @@ protected:
 public:
 
   EHintAction HintAction = EHintAction::None;
-  AInteractableActor * Interactable = nullptr;
+  TWeakObjectPtr<AInteractableActor> Interactable;
 
-  bool NeedFacing               = false;
   bool IsAttachedToInteractable = false;
 
   float DistanceDiscoverableSquared = 0.0f;

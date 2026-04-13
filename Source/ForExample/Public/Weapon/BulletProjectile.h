@@ -39,10 +39,10 @@ protected:
 
 protected:
 
-  UPROPERTY(VisibleDefaultsOnly, Category=Projectile)
+  UPROPERTY(VisibleDefaultsOnly)
   USphereComponent * CollisionComponent;
 
-  UPROPERTY(VisibleAnywhere, Category=Movement)
+  UPROPERTY(VisibleDefaultsOnly, Category=Movement)
   UProjectileMovementComponent * ProjectileMovementComponent;
 
 };

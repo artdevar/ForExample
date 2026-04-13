@@ -11,6 +11,7 @@ class AInteractableActor;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWeaponPickedUpSignature, AWeapon*, Weapon);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWeaponDroppedSignature, AWeapon*, Weapon);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FAimSignature, bool, bIsAiming, AWeapon *, Weapon);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FHealthChangedSignature, int32, Health, int32, MaxHealth);
 
 UCLASS()
@@ -98,6 +99,9 @@ protected:
   UFUNCTION(BlueprintPure)
   bool IsRunning() const;
 
+  UFUNCTION(BlueprintPure)
+  bool IsWalking() const;
+
   UFUNCTION(BlueprintCallable)
   void OnWeaponShoot(FWeaponRecoilParams RecoilParams);
 
@@ -110,11 +114,15 @@ protected:
   UFUNCTION(BlueprintImplementableEvent)
   void InitInput();
 
+  void SetUseControllerRotationYaw(bool bUse);
+
   AInteractableActor * GetClosestInteractable() const;
 
-  void TryCreateHint();
+  void CreateHint();
 
-  void TryDestroyHint();
+  void UpdateHint();
+
+  void DestroyHint();
 
 //
 // Replication
@@ -129,7 +137,7 @@ protected:
   void SetRunning(bool bIsRunning);
 
   UFUNCTION()
-  void OnRep_WeaponChanged(AWeapon * PrevWeapon);
+  void OnRep_WeaponChanged(const TWeakObjectPtr<AWeapon> & PrevWeapon);
 
   UFUNCTION(Server, Reliable, WithValidation)
   void Server_PickupInteractable(AInteractableActor * Interactable);
@@ -163,6 +171,9 @@ public:
   UPROPERTY(BlueprintAssignable)
   FHealthChangedSignature OnHealthChanged;
 
+  UPROPERTY(BlueprintAssignable)
+  FAimSignature OnAimToggled;
+
   UPROPERTY(BlueprintAssignable, Category=Weapon)
   FWeaponPickedUpSignature OnWeaponPickedUp;
 
@@ -193,14 +204,14 @@ protected:
   bool bApplyControllerRotationYawWithWeapon = false;
 
   UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_WeaponChanged, Category=Weapon)
-  AWeapon * Weapon = nullptr;
+  TWeakObjectPtr<AWeapon> Weapon;
 
   UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_AimChanged)
   bool bIsAiming = false;
 
 protected:
 
-  bool    bLookForInteractables = false;
-  AHint * HintToInteractable    = nullptr;
+  FTimerHandle LookForInteractableTimer;
+  AHint *      HintToInteractable = nullptr;
 
 };
