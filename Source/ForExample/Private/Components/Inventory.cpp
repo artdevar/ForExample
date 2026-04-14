@@ -11,8 +11,7 @@ void UInventory::BeginPlay()
   Super::BeginPlay();
 }
 
-void UInventory::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction * ThisTickFunction)
+void UInventory::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction)
 {
   Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 }
-

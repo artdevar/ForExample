@@ -34,6 +34,9 @@ public:
   UFUNCTION(BlueprintPure, Category=Weapon)
   bool IsWeaponReloading() const;
 
+  UFUNCTION(BlueprintPure, Category=Weapon)
+  bool IsWeaponAmmoFull() const;
+
   void OnHealthPointsChanged();
 
 protected:

@@ -14,7 +14,7 @@
 AHeroBase::AHeroBase()
 {
   PrimaryActorTick.bCanEverTick = true;
-  bReplicates = true;
+  bReplicates                   = true;
 }
 
 void AHeroBase::Tick(float DeltaSeconds)
@@ -141,7 +141,7 @@ void AHeroBase::InputActionReload()
 {
   if (IsLocallyControlled())
   {
-    if (IsRunning() || !HasWeapon() || IsWeaponReloading())
+    if (IsRunning() || !HasWeapon() || IsWeaponReloading() || IsWeaponAmmoFull())
       return;
 
     Weapon->Reload();
@@ -157,14 +157,14 @@ void AHeroBase::InputActionSwitchFireMode()
   }
 }
 
-float AHeroBase::TakeDamage(float DamageAmount, struct FDamageEvent const & DamageEvent, class AController * EventInstigator, AActor * DamageCauser)
+float AHeroBase::TakeDamage(float DamageAmount, struct FDamageEvent const &DamageEvent, class AController *EventInstigator, AActor *DamageCauser)
 {
   const float DamageApplied = Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
   GetPlayerState<AHeroState>()->DecreaseHealth(FMath::RoundToInt32(DamageApplied));
   return DamageApplied;
 }
 
-void AHeroBase::OnPlayerStateChanged(APlayerState * NewPlayerState, APlayerState * OldPlayerState)
+void AHeroBase::OnPlayerStateChanged(APlayerState *NewPlayerState, APlayerState *OldPlayerState)
 {
   Super::OnPlayerStateChanged(NewPlayerState, OldPlayerState);
 
@@ -175,7 +175,7 @@ void AHeroBase::OnPlayerStateChanged(APlayerState * NewPlayerState, APlayerState
   OnHealthChanged.Broadcast(HeroState->Health, HeroState->MaxHealth);
 }
 
-void AHeroBase::AddControlRotation(const FRotator & NewRotation)
+void AHeroBase::AddControlRotation(const FRotator &NewRotation)
 {
   if (IsLocallyControlled())
     GetController()->SetControlRotation(GetControlRotation() + NewRotation);
@@ -194,6 +194,11 @@ bool AHeroBase::IsWeaponAiming() const
 bool AHeroBase::IsWeaponReloading() const
 {
   return HasWeapon() && Weapon->IsReloading();
+}
+
+bool AHeroBase::IsWeaponAmmoFull() const
+{
+  return HasWeapon() && Weapon->HasFullAmmo();
 }
 
 void AHeroBase::OnHealthPointsChanged()
@@ -232,28 +237,28 @@ void AHeroBase::OnWeaponShoot(FWeaponRecoilParams RecoilParams)
 
 void AHeroBase::SetUseControllerRotationYaw(bool bUse)
 {
-  bUseControllerRotationYaw = bUse;
+  bUseControllerRotationYaw                         = bUse;
   GetCharacterMovement()->bOrientRotationToMovement = !bUseControllerRotationYaw;
 }
 
-AInteractableActor * AHeroBase::GetClosestInteractable() const
+AInteractableActor *AHeroBase::GetClosestInteractable() const
 {
   const FVector HeroLocation            = GetActorLocation();
   const float   DiscoverDistanceSquared = InteractableDiscoverDistance * InteractableDiscoverDistance;
 
-  FCollisionShape      Sphere          = FCollisionShape::MakeSphere(InteractableDiscoverDistance);
-  AInteractableActor * Interactable    = nullptr;
-  float                ClosestDistance = FLT_MAX;
+  FCollisionShape     Sphere          = FCollisionShape::MakeSphere(InteractableDiscoverDistance);
+  AInteractableActor *Interactable    = nullptr;
+  float               ClosestDistance = FLT_MAX;
 
   TArray<FOverlapResult> OverlapResults;
-  FCollisionQueryParams QueryParams;
+  FCollisionQueryParams  QueryParams;
   QueryParams.AddIgnoredActor(this);
 
   GetWorld()->OverlapMultiByChannel(OverlapResults, GetActorLocation(), FQuat::Identity, ECC_Visibility, Sphere, QueryParams);
 
-  for (const FOverlapResult & Result : OverlapResults)
+  for (const FOverlapResult &Result : OverlapResults)
   {
-    AActor * Actor = Result.GetActor();
+    AActor *Actor = Result.GetActor();
 
     const float DistanceDeltaSquared = (Actor->GetActorLocation() - HeroLocation).SquaredLength();
     if (DistanceDeltaSquared > DiscoverDistanceSquared)
@@ -261,8 +266,7 @@ AInteractableActor * AHeroBase::GetClosestInteractable() const
 
     if (DistanceDeltaSquared < ClosestDistance)
     {
-      if (AInteractableActor * InteractableActor = Cast<AInteractableActor>(Actor);
-          InteractableActor && InteractableActor->IsPickupable())
+      if (AInteractableActor *InteractableActor = Cast<AInteractableActor>(Actor); InteractableActor && InteractableActor->IsPickupable())
       {
         Interactable    = InteractableActor;
         ClosestDistance = DistanceDeltaSquared;
@@ -278,17 +282,17 @@ void AHeroBase::CreateHint()
   ensure(HintToInteractable == nullptr);
 
   FActorSpawnParameters HintSpawnParams;
-  HintSpawnParams.Owner = this;
+  HintSpawnParams.Owner                          = this;
   HintSpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-  HintToInteractable = GetWorld()->SpawnActor<AHint>(HintClass, FTransform(), HintSpawnParams);
+  HintToInteractable                              = GetWorld()->SpawnActor<AHint>(HintClass, FTransform(), HintSpawnParams);
   HintToInteractable->IsAttachedToInteractable    = true;
   HintToInteractable->DistanceDiscoverableSquared = InteractableDiscoverDistance * InteractableDiscoverDistance;
 }
 
 void AHeroBase::UpdateHint()
 {
-  AInteractableActor * ClosestInteractable = GetClosestInteractable();
+  AInteractableActor *ClosestInteractable = GetClosestInteractable();
   HintToInteractable->ChangeInteractable(ClosestInteractable, ClosestInteractable ? EHintAction::Pickup : EHintAction::None);
 }
 
@@ -305,7 +309,7 @@ void AHeroBase::DestroyHint()
 // Replication
 //
 
-void AHeroBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty> & OutLifetimeProps) const
+void AHeroBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty> &OutLifetimeProps) const
 {
   Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
@@ -332,7 +336,7 @@ void AHeroBase::SetRunning_Implementation(bool bIsRunning)
   }
 }
 
-void AHeroBase::OnRep_WeaponChanged(const TWeakObjectPtr<AWeapon> & PrevWeapon)
+void AHeroBase::OnRep_WeaponChanged(const TWeakObjectPtr<AWeapon> &PrevWeapon)
 {
   const bool WeaponChanged = !PrevWeapon.IsExplicitlyNull();
   const bool WeaponDropped = Weapon.IsExplicitlyNull();
@@ -359,11 +363,13 @@ void AHeroBase::OnRep_WeaponChanged(const TWeakObjectPtr<AWeapon> & PrevWeapon)
     OnWeaponDropped.Broadcast(PrevWeapon.Get());
 
     FTimerHandle Timer;
-    GetWorld()->GetTimerManager().SetTimer(Timer, [WeaponPtr = PrevWeapon]()
-    {
-      if (WeaponPtr.IsValid())
-        WeaponPtr->SetPickupable(true);
-    }, 1.0f, false);
+    GetWorld()->GetTimerManager().SetTimer(
+        Timer,
+        [WeaponPtr = PrevWeapon]() {
+          if (WeaponPtr.IsValid())
+            WeaponPtr->SetPickupable(true);
+        },
+        1.0f, false);
 
     GetComponentByClass<URecoilHandler>()->Deactivate();
     SetUseControllerRotationYaw(false);
@@ -386,21 +392,20 @@ void AHeroBase::OnRep_WeaponChanged(const TWeakObjectPtr<AWeapon> & PrevWeapon)
   }
 }
 
-void AHeroBase::Server_PickupInteractable_Implementation(AInteractableActor * Interactable)
+void AHeroBase::Server_PickupInteractable_Implementation(AInteractableActor *Interactable)
 {
   switch (Interactable->GetType())
   {
-    case EInteractableType::Weapon:
-    {
-      auto PrevWeapon = Weapon;
-      Weapon = Cast<AWeapon>(Interactable);
-      OnRep_WeaponChanged(PrevWeapon.Get());
-      break;
-    }
+  case EInteractableType::Weapon: {
+    auto PrevWeapon = Weapon;
+    Weapon          = Cast<AWeapon>(Interactable);
+    OnRep_WeaponChanged(PrevWeapon.Get());
+    break;
+  }
   }
 }
 
-bool AHeroBase::Server_PickupInteractable_Validate(AInteractableActor * Interactable)
+bool AHeroBase::Server_PickupInteractable_Validate(AInteractableActor *Interactable)
 {
   return GetClosestInteractable() == Interactable;
 }
@@ -408,7 +413,7 @@ bool AHeroBase::Server_PickupInteractable_Validate(AInteractableActor * Interact
 void AHeroBase::Server_DropInteractable_Implementation()
 {
   auto PrevWeapon = Weapon;
-  Weapon = nullptr;
+  Weapon          = nullptr;
   OnRep_WeaponChanged(PrevWeapon);
 }
 

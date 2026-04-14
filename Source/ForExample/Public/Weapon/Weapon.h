@@ -52,6 +52,8 @@ public:
 
   int32 GetDamage(const TSoftObjectPtr<class UPhysicalMaterial> & MaterialHit) const;
 
+  bool HasFullAmmo() const;
+
 public: // Animation events
 
   UFUNCTION(BlueprintCallable, Category=Magazine)
@@ -65,7 +67,7 @@ public: // Animation events
 
 protected:
 
-  bool IsAmmo() const;
+  bool HasAmmo() const;
 
   void OnNoAmmoLeft();
 
